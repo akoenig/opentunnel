@@ -1,0 +1,54 @@
+<h2>OpenTunnel Plan Map</h2>
+<p class="subtitle">A compact view of what the current plan commits to, plus the decisions that still look worth brainstorming.</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">V1 Product Loop</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:1fr 80px 1fr 80px 1fr;gap:12px;align-items:center;text-align:center">
+        <div class="placeholder" style="min-height:110px"><strong>Host</strong><br>curl /cli | sh -s -- create<br><br>foreground process<br>prints agent prompt</div>
+        <div style="font-size:28px">&#8594;</div>
+        <div class="placeholder" style="min-height:110px"><strong>Relay</strong><br>/cli + opaque routing<br><br>memory only<br>one client route</div>
+        <div style="font-size:28px">&#8592;</div>
+        <div class="placeholder" style="min-height:110px"><strong>Agent</strong><br>curl /cli | sh -s -- exec<br><br>one command<br>streamed output</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Strong Decisions Already In The Plan</h3>
+  <div class="options" data-multiselect>
+    <div class="option" data-choice="foreground-lifecycle" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content"><h3>Foreground Lifecycle</h3><p><code>create</code> owns the tunnel lifetime. Ctrl+C is revocation. No daemon, dashboard, stop/list/logs, or persistent session state.</p></div>
+    </div>
+    <div class="option" data-choice="relay-blind" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content"><h3>Relay-Blind Runtime</h3><p>The relay serves artifacts and routes packets, but never sees invite secrets, commands, output, exit codes, host metadata, or client identity as plaintext.</p></div>
+    </div>
+    <div class="option" data-choice="go-monobinary" onclick="toggleSelect(this)">
+      <div class="letter">3</div>
+      <div class="content"><h3>Go Monobinary</h3><p>One <code>opentunnel</code> binary supports <code>relay</code>, <code>create</code>, and <code>exec</code>, with a required Noise spike before full implementation.</p></div>
+    </div>
+    <div class="option" data-choice="sequential-exec" onclick="toggleSelect(this)">
+      <div class="letter">4</div>
+      <div class="content"><h3>Repeated Sequential Exec</h3><p>The invite is reusable while the foreground host session is alive, but only one client and one command may be active at a time.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Main Brainstorming Pressure Points</h3>
+  <div class="cards">
+    <div class="card" data-choice="security" onclick="toggleSelect(this)">
+      <div class="card-body"><h3>Security Model Sharpness</h3><p>Noise pattern choice, invite semantics, relay-visible routing handles, replay boundaries, and what claims the product can safely make.</p></div>
+    </div>
+    <div class="card" data-choice="mvp-scope" onclick="toggleSelect(this)">
+      <div class="card-body"><h3>V1 Scope Control</h3><p>The plan is coherent but large. It may need a thinner first implementation slice without violating the intended product experience.</p></div>
+    </div>
+    <div class="card" data-choice="distribution" onclick="toggleSelect(this)">
+      <div class="card-body"><h3>/cli Distribution</h3><p>Frictionless curl-to-temp-binary UX versus artifact version compatibility, temp cache safety, and honest supply-chain messaging.</p></div>
+    </div>
+  </div>
+</div>
