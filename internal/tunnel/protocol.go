@@ -11,6 +11,7 @@ const (
 	commandRequest = "commandRequest"
 	output         = "output"
 	exit           = "exit"
+	errorMessage   = "error"
 )
 
 type message struct {

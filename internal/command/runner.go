@@ -28,6 +28,7 @@ func Run(ctx context.Context, command string, onChunk func(OutputChunk)) (Result
 	}
 
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", command)
+	configureCommandCleanup(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return Result{}, fmt.Errorf("open stdout pipe: %w", err)

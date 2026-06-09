@@ -144,6 +144,44 @@ func TestExecReturnsNonZeroExitCodeWithoutError(t *testing.T) {
 	}
 }
 
+func TestExecCommandTimeout(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{
+		RelayURL:       relayURL(server.URL),
+		CommandTimeout: 50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	result, err := Exec(ctx, ExecConfig{
+		Invite:  session.Invite,
+		Command: "sleep 2",
+	})
+	if err == nil {
+		t.Fatal("exec returned nil error, want command timeout error")
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("exit code = %d, want 1", result.ExitCode)
+	}
+	if !strings.Contains(err.Error(), string(ErrorTypeCommandTimeout)) {
+		t.Fatalf("exec error = %v, want %s", err, ErrorTypeCommandTimeout)
+	}
+
+	// M3 treats command timeout as a host connection failure after the encrypted
+	// error frame is sent; future milestones may keep the session alive.
+	select {
+	case <-session.Done:
+	case <-time.After(time.Second):
+		t.Fatal("host did not stop after command timeout")
+	}
+}
+
 func TestExecStreamsStderrThroughEncryptedTunnel(t *testing.T) {
 	server := httptest.NewServer(relay.NewServer().Handler())
 	defer server.Close()

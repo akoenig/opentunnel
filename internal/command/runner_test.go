@@ -90,6 +90,37 @@ func TestRunReturnsExitCodeForNonZeroExit(t *testing.T) {
 	}
 }
 
+func TestRunCancelsCommandOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+
+	started := time.Now()
+	go func() {
+		_, err := Run(ctx, "sleep 2", nil)
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Run did not return promptly after context cancellation")
+	}
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatal("Run returned nil error, want cancellation error")
+	}
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run error = %v, want context cancellation error", err)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("Run returned after %s, want prompt cancellation", elapsed)
+	}
+}
+
 func TestRunRejectsEmptyCommand(t *testing.T) {
 	_, err := Run(context.Background(), "", nil)
 

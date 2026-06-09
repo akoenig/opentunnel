@@ -105,6 +105,8 @@ func Exec(ctx context.Context, cfg ExecConfig) (ExecResult, error) {
 			}
 		case exit:
 			return ExecResult{ExitCode: msg.ExitCode}, nil
+		case errorMessage:
+			return ExecResult{ExitCode: 1}, fmt.Errorf("%s: %s", msg.ErrorType, msg.Message)
 		default:
 			return ExecResult{}, fmt.Errorf("unexpected tunnel message type %q", msg.Type)
 		}

@@ -18,8 +18,11 @@ import (
 	"opentunnel/internal/securechannel"
 )
 
+const defaultCommandTimeout = 120 * time.Second
+
 type HostConfig struct {
-	RelayURL string
+	RelayURL       string
+	CommandTimeout time.Duration
 }
 
 type HostSession struct {
@@ -64,18 +67,18 @@ func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
 	}
 
 	done := make(chan error, 1)
-	go runHost(ctx, conn, hostKey, clientSecret, relayURL, sessionID, done)
+	go runHost(ctx, conn, hostKey, clientSecret, relayURL, sessionID, cfg.CommandTimeout, done)
 
 	return HostSession{SessionID: sessionID, Invite: inviteCode, Done: done}, nil
 }
 
-func runHost(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relayURL *url.URL, sessionID string, done chan<- error) {
+func runHost(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relayURL *url.URL, sessionID string, commandTimeout time.Duration, done chan<- error) {
 	defer close(done)
 
 	relay := relayURL.String()
 	endpoint := tunnelEndpoint(relayURL, "host", sessionID)
 	for {
-		if err := handleOneHostConnection(ctx, conn, hostKey, clientSecret, relay, sessionID); err != nil && !errors.Is(ctx.Err(), context.Canceled) {
+		if err := handleOneHostConnection(ctx, conn, hostKey, clientSecret, relay, sessionID, commandTimeout); err != nil && !errors.Is(ctx.Err(), context.Canceled) {
 			done <- err
 			return
 		}
@@ -116,7 +119,7 @@ func dialHostRelay(ctx context.Context, endpoint string) (*websocket.Conn, error
 	}
 }
 
-func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string) error {
+func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration) error {
 	defer conn.Close()
 
 	connectionDone := make(chan struct{})
@@ -129,10 +132,10 @@ func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey 
 		}
 	}()
 
-	return handleOneCommand(ctx, conn, hostKey, clientSecret, relay, sessionID)
+	return handleOneCommand(ctx, conn, hostKey, clientSecret, relay, sessionID, commandTimeout)
 }
 
-func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string) error {
+func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration) error {
 	_, msg1, err := conn.ReadMessage()
 	if err != nil {
 		return fmt.Errorf("read client handshake: %w", err)
@@ -164,10 +167,17 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 
 	// M2 supports one command per client connection; callers can start a new host for another command.
 	sender := outputSender{}
-	result, err := command.Run(ctx, request.Command, func(chunk command.OutputChunk) {
+	commandCtx, cancel := context.WithTimeout(ctx, effectiveCommandTimeout(commandTimeout))
+	defer cancel()
+	result, err := command.Run(commandCtx, request.Command, func(chunk command.OutputChunk) {
 		sender.send(channel, conn.WriteMessage, chunk)
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			if sendErr := sendCommandTimeout(channel, conn.WriteMessage); sendErr != nil {
+				return sendErr
+			}
+		}
 		return err
 	}
 	if err := sender.err(); err != nil {
@@ -183,6 +193,28 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	}
 	if _, _, err := conn.ReadMessage(); err != nil && ctx.Err() != nil {
 		return ctx.Err()
+	}
+	return nil
+}
+
+func effectiveCommandTimeout(commandTimeout time.Duration) time.Duration {
+	if commandTimeout == 0 {
+		return defaultCommandTimeout
+	}
+	return commandTimeout
+}
+
+func sendCommandTimeout(channel *securechannel.Channel, writeMessage func(int, []byte) error) error {
+	frame, err := encryptJSON(channel, message{
+		Type:      errorMessage,
+		ErrorType: ErrorTypeCommandTimeout,
+		Message:   "Command exceeded timeout.",
+	})
+	if err != nil {
+		return err
+	}
+	if err := writeMessage(websocket.BinaryMessage, frame); err != nil {
+		return fmt.Errorf("write command timeout: %w", err)
 	}
 	return nil
 }
