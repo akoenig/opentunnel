@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -214,6 +215,48 @@ func TestExecStreamsStderrThroughEncryptedTunnel(t *testing.T) {
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("exit code = %d, want 0", result.ExitCode)
+	}
+}
+
+func TestExecDoesNotLeakContextWatcherAfterSuccess(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	hostCtx, cancelHost := context.WithCancel(context.Background())
+	defer cancelHost()
+
+	session, err := StartHost(hostCtx, HostConfig{RelayURL: relayURL(server.URL)})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	runtime.GC()
+	before := runtime.NumGoroutine()
+	for i := 0; i < 5; i++ {
+		var result ExecResult
+		deadline := time.Now().Add(time.Second)
+		for {
+			result, err = Exec(context.Background(), ExecConfig{
+				Invite:  session.Invite,
+				Command: "printf ok",
+			})
+			if err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("exec %d: %v", i, err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if result.ExitCode != 0 {
+			t.Fatalf("exec %d exit code = %d, want 0", i, result.ExitCode)
+		}
+	}
+	runtime.GC()
+	after := runtime.NumGoroutine()
+
+	if after-before > 2 {
+		t.Fatalf("goroutines grew from %d to %d after successful execs", before, after)
 	}
 }
 
