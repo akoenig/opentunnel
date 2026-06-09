@@ -202,11 +202,67 @@ func TestOutputSenderRecordsFirstErrorAndSkipsLaterWrites(t *testing.T) {
 	}
 }
 
+func TestSemanticErrorTypes(t *testing.T) {
+	values := map[ErrorType]string{
+		ErrorTypeHostUnavailable:        "HostUnavailableError",
+		ErrorTypeClientAlreadyConnected: "ClientAlreadyConnectedError",
+		ErrorTypeHandshakeFailed:        "HandshakeFailedError",
+		ErrorTypeCommandAlreadyRunning:  "CommandAlreadyRunningError",
+		ErrorTypeCommandTimeout:         "CommandTimeoutError",
+		ErrorTypeMaxOutputExceeded:      "MaxOutputExceededError",
+		ErrorTypeCommandStartFailed:     "CommandStartFailedError",
+		ErrorTypeIdleSessionTimeout:     "IdleSessionTimeoutError",
+		ErrorTypeProtocol:               "ProtocolError",
+	}
+
+	for got, want := range values {
+		if string(got) != want {
+			t.Fatalf("error type = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestEncryptedErrorMessageRoundTrip(t *testing.T) {
+	client, host := testChannels(t)
+	want := message{
+		Type:      "error",
+		ErrorType: ErrorTypeCommandAlreadyRunning,
+		Message:   "Another command is already running for this tunnel.",
+	}
+
+	ciphertext, err := encryptJSON(client, want)
+	if err != nil {
+		t.Fatalf("encrypt error message: %v", err)
+	}
+
+	got, err := decryptJSON(host, ciphertext)
+	if err != nil {
+		t.Fatalf("decrypt error message: %v", err)
+	}
+
+	if got.Type != want.Type {
+		t.Fatalf("type = %q, want %q", got.Type, want.Type)
+	}
+	if got.ErrorType != want.ErrorType {
+		t.Fatalf("error type = %q, want %q", got.ErrorType, want.ErrorType)
+	}
+	if got.Message != want.Message {
+		t.Fatalf("message = %q, want %q", got.Message, want.Message)
+	}
+}
+
 func relayURL(httpURL string) string {
 	return "ws" + strings.TrimPrefix(httpURL, "http")
 }
 
 func testHostChannel(t *testing.T) *securechannel.Channel {
+	t.Helper()
+
+	_, host := testChannels(t)
+	return host
+}
+
+func testChannels(t *testing.T) (*securechannel.Channel, *securechannel.Channel) {
 	t.Helper()
 
 	var clientSecret [securechannel.ClientSecretSize]byte
@@ -217,7 +273,7 @@ func testHostChannel(t *testing.T) *securechannel.Channel {
 	if err != nil {
 		t.Fatalf("generate host keypair: %v", err)
 	}
-	_, host, err := securechannel.EstablishChannelWithHostKey(
+	client, host, err := securechannel.EstablishChannelWithHostKey(
 		handshakeConfig("test-session", "ws://relay.example", clientSecret),
 		hostKey,
 		hostKey.Public,
@@ -225,5 +281,5 @@ func testHostChannel(t *testing.T) *securechannel.Channel {
 	if err != nil {
 		t.Fatalf("establish channel: %v", err)
 	}
-	return host
+	return client, host
 }

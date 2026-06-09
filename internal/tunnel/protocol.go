@@ -14,11 +14,13 @@ const (
 )
 
 type message struct {
-	Type     string `json:"type"`
-	Command  string `json:"command,omitempty"`
-	Stream   string `json:"stream,omitempty"`
-	Data     []byte `json:"data,omitempty"`
-	ExitCode int    `json:"exitCode,omitempty"`
+	Type      string    `json:"type"`
+	Command   string    `json:"command,omitempty"`
+	Stream    string    `json:"stream,omitempty"`
+	Data      []byte    `json:"data,omitempty"`
+	ExitCode  int       `json:"exitCode,omitempty"`
+	ErrorType ErrorType `json:"errorType,omitempty"`
+	Message   string    `json:"message,omitempty"`
 }
 
 func encryptJSON(channel *securechannel.Channel, msg message) ([]byte, error) {
