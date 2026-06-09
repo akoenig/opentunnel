@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/rand"
 	"testing"
+
+	"github.com/flynn/noise"
 )
 
 func TestNKpsk0HandshakeEncryptsMultipleFrames(t *testing.T) {
@@ -132,6 +134,25 @@ func TestDecryptRejectsReplayedCiphertext(t *testing.T) {
 
 	if _, err := host.Decrypt(ciphertext); err == nil {
 		t.Fatalf("expected replayed ciphertext to fail")
+	}
+}
+
+func TestXXpsk3PatternIsAvailableForFallbackEvaluation(t *testing.T) {
+	if noise.HandshakeXX.Name != "XX" {
+		t.Fatalf("noise.HandshakeXX is not available")
+	}
+
+	cfg := noise.Config{
+		CipherSuite:           noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s),
+		Pattern:               noise.HandshakeXX,
+		Initiator:             true,
+		Prologue:              []byte("OpenTunnel XXpsk3 availability check"),
+		PresharedKey:          bytes.Repeat([]byte{7}, ClientSecretSize),
+		PresharedKeyPlacement: 3,
+	}
+
+	if _, err := noise.NewHandshakeState(cfg); err != nil {
+		t.Fatalf("XXpsk3 handshake state should be constructible: %v", err)
 	}
 }
 
