@@ -1,17 +1,40 @@
 package relay
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"sync"
+
+	"opentunnel/internal/artifact"
 
 	"github.com/gorilla/websocket"
 )
 
 // Server routes opaque websocket tunnel frames between one host and one client per session.
 type Server struct {
-	mu       sync.Mutex
-	sessions map[string]*session
-	upgrader websocket.Upgrader
+	mu           sync.Mutex
+	sessions     map[string]*session
+	upgrader     websocket.Upgrader
+	cliArtifacts *CLIArtifacts
+}
+
+// CLIArtifacts configures optional CLI artifact responses served by the relay.
+type CLIArtifacts struct {
+	RelayOrigin string
+	Version     string
+	PlatformKey string
+	BinaryPath  string
+}
+
+// Option configures a relay server.
+type Option func(*Server)
+
+// WithCLIArtifacts enables serving bootstrap, binary, and checksum artifacts.
+func WithCLIArtifacts(artifacts CLIArtifacts) Option {
+	return func(s *Server) {
+		s.cliArtifacts = &artifacts
+	}
 }
 
 type session struct {
@@ -22,8 +45,8 @@ type session struct {
 }
 
 // NewServer creates an in-memory relay server.
-func NewServer() *Server {
-	return &Server{
+func NewServer(opts ...Option) *Server {
+	server := &Server{
 		sessions: make(map[string]*session),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -31,11 +54,19 @@ func NewServer() *Server {
 			},
 		},
 	}
+	for _, opt := range opts {
+		opt(server)
+	}
+	return server
 }
 
 // Handler returns the HTTP handler for the relay tunnel endpoint.
 func (s *Server) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.handleCLIArtifact(w, r) {
+			return
+		}
+
 		if r.URL.Path != "/tunnel" {
 			http.NotFound(w, r)
 			return
@@ -61,6 +92,78 @@ func (s *Server) Handler() http.Handler {
 
 		s.forward(role, sessionID, conn)
 	})
+}
+
+func (s *Server) handleCLIArtifact(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodGet || (r.URL.Path != "/cli" && r.URL.Path != s.binaryPath() && r.URL.Path != s.checksumPath()) {
+		return false
+	}
+	if s.cliArtifacts == nil {
+		http.NotFound(w, r)
+		return true
+	}
+
+	checksum, err := artifact.SHA256File(s.cliArtifacts.BinaryPath)
+	if err != nil {
+		http.Error(w, "artifact unavailable", http.StatusInternalServerError)
+		return true
+	}
+
+	if r.URL.Path == "/cli" {
+		s.serveBootstrap(w, checksum)
+		return true
+	}
+	if r.URL.Path == s.binaryPath() {
+		s.serveBinary(w)
+		return true
+	}
+	if r.URL.Path == s.checksumPath() {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintln(w, checksum)
+		return true
+	}
+
+	http.NotFound(w, r)
+	return true
+}
+
+func (s *Server) serveBootstrap(w http.ResponseWriter, checksum string) {
+	script, err := artifact.RenderBootstrap(artifact.BootstrapConfig{
+		RelayOrigin: s.cliArtifacts.RelayOrigin,
+		Version:     s.cliArtifacts.Version,
+		PlatformKey: s.cliArtifacts.PlatformKey,
+		Checksum:    checksum,
+	})
+	if err != nil {
+		http.Error(w, "artifact unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+	fmt.Fprint(w, script)
+}
+
+func (s *Server) serveBinary(w http.ResponseWriter) {
+	contents, err := os.ReadFile(s.cliArtifacts.BinaryPath)
+	if err != nil {
+		http.Error(w, "artifact unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Write(contents)
+}
+
+func (s *Server) binaryPath() string {
+	if s.cliArtifacts == nil {
+		return ""
+	}
+	return "/cli/bin/opentunnel-" + s.cliArtifacts.Version + "-" + s.cliArtifacts.PlatformKey
+}
+
+func (s *Server) checksumPath() string {
+	if s.cliArtifacts == nil {
+		return ""
+	}
+	return s.binaryPath() + ".sha256"
 }
 
 func (s *Server) reserve(role, sessionID string) bool {

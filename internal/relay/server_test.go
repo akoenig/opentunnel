@@ -2,8 +2,13 @@ package relay
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +18,99 @@ import (
 )
 
 const readTimeout = time.Second
+
+func TestCLIBootstrapUsesConfiguredArtifactCoordinates(t *testing.T) {
+	binaryPath := writeTestBinary(t, []byte("binary bytes"))
+	checksum := testSHA256([]byte("binary bytes"))
+	server := NewServer(WithCLIArtifacts(CLIArtifacts{
+		RelayOrigin: "https://relay.example.com",
+		Version:     "1.2.3",
+		PlatformKey: "linux-amd64",
+		BinaryPath:  binaryPath,
+	}))
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	response, body := getRelayPath(t, httpServer.URL, "/cli")
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status mismatch: got %d want %d", response.StatusCode, http.StatusOK)
+	}
+	contentType := response.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "text/x-shellscript") && !strings.HasPrefix(contentType, "text/plain") {
+		t.Fatalf("content type mismatch: got %q", contentType)
+	}
+	for _, want := range []string{
+		"relay_origin='https://relay.example.com'",
+		"version='1.2.3'",
+		"platform='linux-amd64'",
+		"expected_checksum='" + checksum + "'",
+		"/cli/bin/opentunnel-1.2.3-linux-amd64",
+		"/cli/bin/opentunnel-1.2.3-linux-amd64.sha256",
+	} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("bootstrap missing %q in:\n%s", want, string(body))
+		}
+	}
+}
+
+func TestCLIBinaryAndChecksumAreServedFromConfiguredArtifact(t *testing.T) {
+	binary := []byte{0, 1, 2, 3, 255}
+	binaryPath := writeTestBinary(t, binary)
+	checksum := testSHA256(binary)
+	server := NewServer(WithCLIArtifacts(CLIArtifacts{
+		RelayOrigin: "http://relay.example.com",
+		Version:     "9.8.7",
+		PlatformKey: "darwin-arm64",
+		BinaryPath:  binaryPath,
+	}))
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	binaryResponse, binaryBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-9.8.7-darwin-arm64")
+	defer binaryResponse.Body.Close()
+	if binaryResponse.StatusCode != http.StatusOK {
+		t.Fatalf("binary status mismatch: got %d want %d", binaryResponse.StatusCode, http.StatusOK)
+	}
+	if contentType := binaryResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/octet-stream") {
+		t.Fatalf("binary content type mismatch: got %q", contentType)
+	}
+	if !bytes.Equal(binaryBody, binary) {
+		t.Fatalf("binary body mismatch: got %v want %v", binaryBody, binary)
+	}
+
+	checksumResponse, checksumBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-9.8.7-darwin-arm64.sha256")
+	defer checksumResponse.Body.Close()
+	if checksumResponse.StatusCode != http.StatusOK {
+		t.Fatalf("checksum status mismatch: got %d want %d", checksumResponse.StatusCode, http.StatusOK)
+	}
+	if contentType := checksumResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+		t.Fatalf("checksum content type mismatch: got %q", contentType)
+	}
+	if got := strings.TrimSpace(string(checksumBody)); got != checksum {
+		t.Fatalf("checksum body mismatch: got %q want %q", got, checksum)
+	}
+}
+
+func TestUnknownCLIArtifactPathReturnsNotFound(t *testing.T) {
+	binaryPath := writeTestBinary(t, []byte("binary bytes"))
+	server := NewServer(WithCLIArtifacts(CLIArtifacts{
+		RelayOrigin: "http://relay.example.com",
+		Version:     "1.2.3",
+		PlatformKey: "linux-amd64",
+		BinaryPath:  binaryPath,
+	}))
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	response, _ := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-1.2.3-linux-arm64")
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status mismatch: got %d want %d", response.StatusCode, http.StatusNotFound)
+	}
+}
 
 func TestClientBinaryMessageReachesHostUnchanged(t *testing.T) {
 	server := NewServer()
@@ -237,6 +335,36 @@ func readMessage(t *testing.T, conn *websocket.Conn) (int, []byte, error) {
 		t.Fatalf("set read deadline: %v", err)
 	}
 	return conn.ReadMessage()
+}
+
+func writeTestBinary(t *testing.T, contents []byte) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "opentunnel")
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatalf("write test binary: %v", err)
+	}
+	return path
+}
+
+func testSHA256(contents []byte) string {
+	hash := sha256.Sum256(contents)
+	return hex.EncodeToString(hash[:])
+}
+
+func getRelayPath(t *testing.T, serverURL, path string) (*http.Response, []byte) {
+	t.Helper()
+
+	response, err := http.Get(serverURL + path)
+	if err != nil {
+		t.Fatalf("get %s: %v", path, err)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		response.Body.Close()
+		t.Fatalf("read %s body: %v", path, err)
+	}
+	return response, body
 }
 
 func tunnelURL(serverURL, role, session string) string {
