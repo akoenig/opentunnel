@@ -183,6 +183,41 @@ func TestExecCommandTimeout(t *testing.T) {
 	}
 }
 
+func TestExecMaxOutputExceeded(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{
+		RelayURL:       relayURL(server.URL),
+		MaxOutputBytes: 5,
+	})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	result, err := Exec(ctx, ExecConfig{
+		Invite:  session.Invite,
+		Command: "printf 123456789",
+		Stdout:  &stdout,
+	})
+	if err == nil {
+		t.Fatal("exec returned nil error, want max output exceeded error")
+	}
+	if stdout.String() != "12345" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "12345")
+	}
+	if result.ExitCode == 0 {
+		t.Fatalf("exit code = %d, want non-zero", result.ExitCode)
+	}
+	if !strings.Contains(err.Error(), string(ErrorTypeMaxOutputExceeded)) {
+		t.Fatalf("exec error = %v, want %s", err, ErrorTypeMaxOutputExceeded)
+	}
+}
+
 func TestExecStreamsStderrThroughEncryptedTunnel(t *testing.T) {
 	server := httptest.NewServer(relay.NewServer().Handler())
 	defer server.Close()

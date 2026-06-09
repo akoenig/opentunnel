@@ -18,11 +18,15 @@ import (
 	"opentunnel/internal/securechannel"
 )
 
-const defaultCommandTimeout = 120 * time.Second
+const (
+	defaultCommandTimeout = 120 * time.Second
+	defaultMaxOutputBytes = 10 * 1024 * 1024
+)
 
 type HostConfig struct {
 	RelayURL       string
 	CommandTimeout time.Duration
+	MaxOutputBytes int
 }
 
 type HostSession struct {
@@ -67,18 +71,18 @@ func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
 	}
 
 	done := make(chan error, 1)
-	go runHost(ctx, conn, hostKey, clientSecret, relayURL, sessionID, cfg.CommandTimeout, done)
+	go runHost(ctx, conn, hostKey, clientSecret, relayURL, sessionID, cfg.CommandTimeout, effectiveMaxOutputBytes(cfg.MaxOutputBytes), done)
 
 	return HostSession{SessionID: sessionID, Invite: inviteCode, Done: done}, nil
 }
 
-func runHost(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relayURL *url.URL, sessionID string, commandTimeout time.Duration, done chan<- error) {
+func runHost(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relayURL *url.URL, sessionID string, commandTimeout time.Duration, maxOutputBytes int, done chan<- error) {
 	defer close(done)
 
 	relay := relayURL.String()
 	endpoint := tunnelEndpoint(relayURL, "host", sessionID)
 	for {
-		if err := handleOneHostConnection(ctx, conn, hostKey, clientSecret, relay, sessionID, commandTimeout); err != nil && !errors.Is(ctx.Err(), context.Canceled) {
+		if err := handleOneHostConnection(ctx, conn, hostKey, clientSecret, relay, sessionID, commandTimeout, maxOutputBytes); err != nil && !errors.Is(ctx.Err(), context.Canceled) {
 			done <- err
 			return
 		}
@@ -119,7 +123,7 @@ func dialHostRelay(ctx context.Context, endpoint string) (*websocket.Conn, error
 	}
 }
 
-func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration) error {
+func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration, maxOutputBytes int) error {
 	defer conn.Close()
 
 	connectionDone := make(chan struct{})
@@ -132,10 +136,10 @@ func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey 
 		}
 	}()
 
-	return handleOneCommand(ctx, conn, hostKey, clientSecret, relay, sessionID, commandTimeout)
+	return handleOneCommand(ctx, conn, hostKey, clientSecret, relay, sessionID, commandTimeout, maxOutputBytes)
 }
 
-func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration) error {
+func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration, maxOutputBytes int) error {
 	_, msg1, err := conn.ReadMessage()
 	if err != nil {
 		return fmt.Errorf("read client handshake: %w", err)
@@ -166,7 +170,7 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	}
 
 	// M2 supports one command per client connection; callers can start a new host for another command.
-	sender := outputSender{}
+	sender := outputSender{maxOutputBytes: maxOutputBytes}
 	commandCtx, cancel := context.WithTimeout(ctx, effectiveCommandTimeout(commandTimeout))
 	defer cancel()
 	result, err := command.Run(commandCtx, request.Command, func(chunk command.OutputChunk) {
@@ -202,6 +206,13 @@ func effectiveCommandTimeout(commandTimeout time.Duration) time.Duration {
 		return defaultCommandTimeout
 	}
 	return commandTimeout
+}
+
+func effectiveMaxOutputBytes(maxOutputBytes int) int {
+	if maxOutputBytes == 0 {
+		return defaultMaxOutputBytes
+	}
+	return maxOutputBytes
 }
 
 func sendCommandTimeout(channel *securechannel.Channel, writeMessage func(int, []byte) error) error {
@@ -265,8 +276,10 @@ func handshakeConfig(sessionID string, relay string, clientSecret [securechannel
 }
 
 type outputSender struct {
-	mu      sync.Mutex
-	sendErr error
+	mu             sync.Mutex
+	sendErr        error
+	maxOutputBytes int
+	bytesSent      int
 }
 
 func (s *outputSender) send(channel *securechannel.Channel, writeMessage func(int, []byte) error, chunk command.OutputChunk) {
@@ -277,14 +290,52 @@ func (s *outputSender) send(channel *securechannel.Channel, writeMessage func(in
 		return
 	}
 
-	frame, err := encryptJSON(channel, message{Type: output, Stream: chunk.Stream, Data: chunk.Data})
+	data := chunk.Data
+	exceeded := false
+	if s.maxOutputBytes > 0 {
+		remaining := s.maxOutputBytes - s.bytesSent
+		if remaining <= 0 {
+			data = nil
+			exceeded = true
+		} else if len(data) > remaining {
+			data = data[:remaining]
+			exceeded = true
+		}
+	}
+
+	if len(data) > 0 {
+		frame, err := encryptJSON(channel, message{Type: output, Stream: chunk.Stream, Data: data})
+		if err != nil {
+			s.sendErr = fmt.Errorf("encrypt output: %w", err)
+			return
+		}
+		if err := writeMessage(websocket.BinaryMessage, frame); err != nil {
+			s.sendErr = fmt.Errorf("write output: %w", err)
+			return
+		}
+		s.bytesSent += len(data)
+	}
+
+	if exceeded {
+		s.sendMaxOutputExceeded(channel, writeMessage)
+	}
+}
+
+func (s *outputSender) sendMaxOutputExceeded(channel *securechannel.Channel, writeMessage func(int, []byte) error) {
+	frame, err := encryptJSON(channel, message{
+		Type:      errorMessage,
+		ErrorType: ErrorTypeMaxOutputExceeded,
+		Message:   "Command output exceeded maximum size.",
+	})
 	if err != nil {
-		s.sendErr = fmt.Errorf("encrypt output: %w", err)
+		s.sendErr = fmt.Errorf("encrypt max output exceeded: %w", err)
 		return
 	}
 	if err := writeMessage(websocket.BinaryMessage, frame); err != nil {
-		s.sendErr = fmt.Errorf("write output: %w", err)
+		s.sendErr = fmt.Errorf("write max output exceeded: %w", err)
+		return
 	}
+	s.sendErr = fmt.Errorf("%s: command output exceeded maximum size", ErrorTypeMaxOutputExceeded)
 }
 
 func (s *outputSender) err() error {
