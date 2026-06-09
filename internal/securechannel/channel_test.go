@@ -137,6 +137,34 @@ func TestDecryptRejectsReplayedCiphertext(t *testing.T) {
 	}
 }
 
+func TestDecryptRejectsMalformedCiphertext(t *testing.T) {
+	cfg := testHandshakeConfig(t)
+	hostKey, err := GenerateHostKeypair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateHostKeypair: %v", err)
+	}
+
+	client, host, err := EstablishChannelWithHostKey(cfg, hostKey, hostKey.Public)
+	if err != nil {
+		t.Fatalf("EstablishChannelWithHostKey: %v", err)
+	}
+
+	if _, err := host.Decrypt([]byte("not a valid noise ciphertext")); err == nil {
+		t.Fatalf("expected malformed ciphertext to fail")
+	}
+
+	ciphertext, err := client.Encrypt([]byte("stdoutData:first"))
+	if err != nil {
+		t.Fatalf("client encrypt: %v", err)
+	}
+
+	tampered := append([]byte(nil), ciphertext...)
+	tampered[len(tampered)-1] ^= 0xff
+	if _, err := host.Decrypt(tampered); err == nil {
+		t.Fatalf("expected tampered ciphertext to fail")
+	}
+}
+
 func TestXXpsk3PatternIsAvailableForFallbackEvaluation(t *testing.T) {
 	if noise.HandshakeXX.Name != "XX" {
 		t.Fatalf("noise.HandshakeXX is not available")

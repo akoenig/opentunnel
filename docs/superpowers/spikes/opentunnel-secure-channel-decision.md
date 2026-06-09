@@ -25,6 +25,7 @@ The client already receives the host session public key inside the opaque invite
 - Wrong `hostPubKey` fails.
 - Wrong prologue fails.
 - Replayed ciphertext fails.
+- Malformed or tampered ciphertext fails.
 
 ## XXpsk3 Fallback Evaluation
 
