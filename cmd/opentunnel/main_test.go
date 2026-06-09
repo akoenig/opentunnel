@@ -56,6 +56,59 @@ func TestParseArgsCreateUsesRelayOriginFromEnvironment(t *testing.T) {
 	}
 }
 
+func TestParseArgsCreateRejectsUnsafeRelayOrigin(t *testing.T) {
+	tests := []string{
+		"http://example.test/$(id)",
+		"http://example.test/path",
+		"http://example.test?download=true",
+		"http://example.test#fragment",
+		"http://user@example.test",
+		"ftp://example.test",
+		"http:///missing-host",
+		"-http://example.test",
+	}
+
+	for _, relayOrigin := range tests {
+		t.Run(relayOrigin, func(t *testing.T) {
+			_, err := parseArgs([]string{"create", "--relay", relayOrigin})
+			if err == nil {
+				t.Fatal("parseArgs() error = nil, want error")
+			}
+		})
+	}
+}
+
+func TestParseArgsCreateRejectsUnsafeRelayOriginFromEnvironment(t *testing.T) {
+	t.Setenv("OPENTUNNEL_RELAY_ORIGIN", "http://example.test/$(id)")
+
+	_, err := parseArgs([]string{"create"})
+	if err == nil {
+		t.Fatal("parseArgs() error = nil, want error")
+	}
+}
+
+func TestParseArgsRelayRejectsUnsafePublicURLOrigin(t *testing.T) {
+	tests := []string{
+		"http://example.test/$(id)",
+		"http://example.test/path",
+		"http://example.test?download=true",
+		"http://example.test#fragment",
+		"http://user@example.test",
+		"ftp://example.test",
+		"http:///missing-host",
+		"-http://example.test",
+	}
+
+	for _, publicURL := range tests {
+		t.Run(publicURL, func(t *testing.T) {
+			_, err := parseArgs([]string{"relay", "--public-url", publicURL})
+			if err == nil {
+				t.Fatal("parseArgs() error = nil, want error")
+			}
+		})
+	}
+}
+
 func TestBuildRelayCLIArtifactsUsesRunningExecutableAndPlatform(t *testing.T) {
 	artifacts, err := buildRelayCLIArtifacts("http://localhost:8080", func() (string, error) {
 		return "/tmp/opentunnel", nil

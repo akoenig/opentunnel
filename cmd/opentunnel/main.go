@@ -102,6 +102,9 @@ func parseCreateArgs(args []string) (createCommand, error) {
 	if cmd.relayURL == "" {
 		return createCommand{}, errors.New("create requires --relay")
 	}
+	if err := validateRelayOrigin(cmd.relayURL, "relay url"); err != nil {
+		return createCommand{}, err
+	}
 	return cmd, nil
 }
 
@@ -141,17 +144,54 @@ func separatorIndex(args []string) int {
 }
 
 func validatePublicURL(raw string) error {
-	publicURL, err := url.Parse(raw)
+	return validateRelayOrigin(raw, "public url")
+}
+
+func validateRelayOrigin(raw string, name string) error {
+	if strings.HasPrefix(raw, "-") {
+		return fmt.Errorf("%s must not start with '-'", name)
+	}
+	origin, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("parse public url: %w", err)
+		return fmt.Errorf("parse %s: %w", name, err)
 	}
-	if publicURL.Scheme != "http" && publicURL.Scheme != "https" {
-		return errors.New("public url must use http or https")
+	if origin.Scheme != "http" && origin.Scheme != "https" {
+		return fmt.Errorf("%s must use http or https", name)
 	}
-	if publicURL.Host == "" {
-		return errors.New("public url host is required")
+	if origin.Host == "" {
+		return fmt.Errorf("%s host is required", name)
+	}
+	if origin.User != nil {
+		return fmt.Errorf("%s must not include userinfo", name)
+	}
+	if origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+		return fmt.Errorf("%s must be an origin without path, query, or fragment", name)
+	}
+	if !isShellSafeURLHost(origin.Host) {
+		return fmt.Errorf("%s host contains unsafe characters", name)
 	}
 	return nil
+}
+
+func isShellSafeURLHost(host string) bool {
+	for _, char := range host {
+		if char >= 'a' && char <= 'z' {
+			continue
+		}
+		if char >= 'A' && char <= 'Z' {
+			continue
+		}
+		if char >= '0' && char <= '9' {
+			continue
+		}
+		switch char {
+		case '.', '-', ':', '[', ']', '%':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
