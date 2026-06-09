@@ -60,6 +60,81 @@ func TestNKpsk0HandshakeEncryptsMultipleFrames(t *testing.T) {
 	}
 }
 
+func TestHandshakeFailsWithWrongClientSecret(t *testing.T) {
+	clientCfg := testHandshakeConfig(t)
+	hostCfg := clientCfg
+	hostKey, err := GenerateHostKeypair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateHostKeypair: %v", err)
+	}
+
+	clientCfg.ClientSecret[0] ^= 0xff
+
+	_, _, err = establishNKpsk0WithConfigs(clientCfg, hostCfg, hostKey.private, hostKey.Public)
+	if err == nil {
+		t.Fatalf("expected wrong client secret to fail")
+	}
+}
+
+func TestHandshakeFailsWithWrongHostPublicKey(t *testing.T) {
+	cfg := testHandshakeConfig(t)
+	hostKey, err := GenerateHostKeypair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateHostKeypair: %v", err)
+	}
+	otherHostKey, err := GenerateHostKeypair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateHostKeypair other: %v", err)
+	}
+
+	_, _, err = establishNKpsk0(cfg, hostKey.private, otherHostKey.Public)
+	if err == nil {
+		t.Fatalf("expected wrong host public key to fail")
+	}
+}
+
+func TestHandshakeFailsWithWrongPrologue(t *testing.T) {
+	clientCfg := testHandshakeConfig(t)
+	hostCfg := clientCfg
+	hostCfg.RelayOrigin = "https://other-relay.example"
+
+	hostKey, err := GenerateHostKeypair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateHostKeypair: %v", err)
+	}
+
+	_, _, err = establishNKpsk0WithConfigs(clientCfg, hostCfg, hostKey.private, hostKey.Public)
+	if err == nil {
+		t.Fatalf("expected wrong prologue to fail")
+	}
+}
+
+func TestDecryptRejectsReplayedCiphertext(t *testing.T) {
+	cfg := testHandshakeConfig(t)
+	hostKey, err := GenerateHostKeypair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateHostKeypair: %v", err)
+	}
+
+	client, host, err := EstablishChannelWithHostKey(cfg, hostKey, hostKey.Public)
+	if err != nil {
+		t.Fatalf("EstablishChannelWithHostKey: %v", err)
+	}
+
+	ciphertext, err := client.Encrypt([]byte("stdoutData:first"))
+	if err != nil {
+		t.Fatalf("client encrypt: %v", err)
+	}
+
+	if _, err := host.Decrypt(ciphertext); err != nil {
+		t.Fatalf("first decrypt: %v", err)
+	}
+
+	if _, err := host.Decrypt(ciphertext); err == nil {
+		t.Fatalf("expected replayed ciphertext to fail")
+	}
+}
+
 func testHandshakeConfig(t *testing.T) HandshakeConfig {
 	t.Helper()
 

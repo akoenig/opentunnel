@@ -39,11 +39,19 @@ func EstablishChannelWithHostKey(cfg HandshakeConfig, hostKey HostKeypair, expec
 }
 
 func establishNKpsk0(cfg HandshakeConfig, hostKey noise.DHKey, expectedHostPublic []byte) (*Channel, *Channel, error) {
+	return establishNKpsk0WithConfigs(cfg, cfg, hostKey, expectedHostPublic)
+}
+
+func establishNKpsk0WithConfigs(clientCfg HandshakeConfig, hostCfg HandshakeConfig, hostKey noise.DHKey, expectedHostPublic []byte) (*Channel, *Channel, error) {
 	if len(expectedHostPublic) == 0 {
 		return nil, nil, fmt.Errorf("%w: expected host public key is required", ErrHostKeyMismatch)
 	}
 
-	prologue, err := BuildPrologue(NewPrologueConfig(cfg))
+	clientPrologue, err := BuildPrologue(NewPrologueConfig(clientCfg))
+	if err != nil {
+		return nil, nil, err
+	}
+	hostPrologue, err := BuildPrologue(NewPrologueConfig(hostCfg))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,8 +60,8 @@ func establishNKpsk0(cfg HandshakeConfig, hostKey noise.DHKey, expectedHostPubli
 		CipherSuite:           noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s),
 		Pattern:               noise.HandshakeNK,
 		Initiator:             true,
-		Prologue:              prologue,
-		PresharedKey:          cfg.ClientSecret[:],
+		Prologue:              clientPrologue,
+		PresharedKey:          clientCfg.ClientSecret[:],
 		PresharedKeyPlacement: 0,
 		PeerStatic:            expectedHostPublic,
 	}
@@ -63,12 +71,14 @@ func establishNKpsk0(cfg HandshakeConfig, hostKey noise.DHKey, expectedHostPubli
 		return nil, nil, fmt.Errorf("%w: create client handshake: %w", ErrHandshakeFailed, err)
 	}
 
-	hostCfg := noiseCfg
-	hostCfg.Initiator = false
-	hostCfg.StaticKeypair = hostKey
-	hostCfg.PeerStatic = nil
+	hostNoiseCfg := noiseCfg
+	hostNoiseCfg.Initiator = false
+	hostNoiseCfg.StaticKeypair = hostKey
+	hostNoiseCfg.Prologue = hostPrologue
+	hostNoiseCfg.PresharedKey = hostCfg.ClientSecret[:]
+	hostNoiseCfg.PeerStatic = nil
 
-	hostHS, err := noise.NewHandshakeState(hostCfg)
+	hostHS, err := noise.NewHandshakeState(hostNoiseCfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: create host handshake: %w", ErrHandshakeFailed, err)
 	}
