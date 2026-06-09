@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -62,23 +64,72 @@ func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
 	}
 
 	done := make(chan error, 1)
-	go runHost(ctx, conn, hostKey, clientSecret, relayURL.String(), sessionID, done)
+	go runHost(ctx, conn, hostKey, clientSecret, relayURL, sessionID, done)
 
 	return HostSession{SessionID: sessionID, Invite: inviteCode, Done: done}, nil
 }
 
-func runHost(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, done chan<- error) {
+func runHost(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relayURL *url.URL, sessionID string, done chan<- error) {
 	defer close(done)
+
+	relay := relayURL.String()
+	endpoint := tunnelEndpoint(relayURL, "host", sessionID)
+	for {
+		if err := handleOneHostConnection(ctx, conn, hostKey, clientSecret, relay, sessionID); err != nil && !errors.Is(ctx.Err(), context.Canceled) {
+			done <- err
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+
+		var err error
+		conn, err = dialHostRelay(ctx, endpoint)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			done <- fmt.Errorf("connect host relay websocket: %w", err)
+			return
+		}
+	}
+}
+
+func dialHostRelay(ctx context.Context, endpoint string) (*websocket.Conn, error) {
+	for {
+		conn, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint, nil)
+		if err == nil {
+			return conn, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if response == nil || response.StatusCode != http.StatusConflict {
+			return nil, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string) error {
 	defer conn.Close()
 
+	connectionDone := make(chan struct{})
+	defer close(connectionDone)
 	go func() {
-		<-ctx.Done()
-		conn.Close()
+		select {
+		case <-ctx.Done():
+			conn.Close()
+		case <-connectionDone:
+		}
 	}()
 
-	if err := handleOneCommand(ctx, conn, hostKey, clientSecret, relay, sessionID); err != nil && !errors.Is(ctx.Err(), context.Canceled) {
-		done <- err
-	}
+	return handleOneCommand(ctx, conn, hostKey, clientSecret, relay, sessionID)
 }
 
 func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string) error {
@@ -129,6 +180,9 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	}
 	if err := conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
 		return fmt.Errorf("write exit: %w", err)
+	}
+	if _, _, err := conn.ReadMessage(); err != nil && ctx.Err() != nil {
+		return ctx.Err()
 	}
 	return nil
 }

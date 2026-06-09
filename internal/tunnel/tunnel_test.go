@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"opentunnel/internal/command"
 	"opentunnel/internal/relay"
@@ -51,6 +52,71 @@ func TestExecRunsCommandThroughEncryptedTunnel(t *testing.T) {
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("exit code = %d, want 0", result.ExitCode)
+	}
+}
+
+func TestStartHostSessionRunsSequentialExecsWithSameInvite(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{RelayURL: relayURL(server.URL)})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	var firstStdout bytes.Buffer
+	firstResult, err := Exec(ctx, ExecConfig{
+		Invite:  session.Invite,
+		Command: "printf one",
+		Stdout:  &firstStdout,
+	})
+	if err != nil {
+		t.Fatalf("first exec: %v", err)
+	}
+	if firstStdout.String() != "one" {
+		t.Fatalf("first stdout = %q, want %q", firstStdout.String(), "one")
+	}
+	if firstResult.ExitCode != 0 {
+		t.Fatalf("first exit code = %d, want 0", firstResult.ExitCode)
+	}
+
+	select {
+	case err := <-session.Done:
+		t.Fatalf("host stopped after first exec: %v", err)
+	default:
+	}
+
+	var secondStdout bytes.Buffer
+	var secondResult ExecResult
+	deadline := time.Now().Add(time.Second)
+	for {
+		secondStdout.Reset()
+		secondResult, err = Exec(ctx, ExecConfig{
+			Invite:  session.Invite,
+			Command: "printf two",
+			Stdout:  &secondStdout,
+		})
+		if err == nil {
+			break
+		}
+		select {
+		case hostErr := <-session.Done:
+			t.Fatalf("host stopped before second exec: %v", hostErr)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("second exec: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if secondStdout.String() != "two" {
+		t.Fatalf("second stdout = %q, want %q", secondStdout.String(), "two")
+	}
+	if secondResult.ExitCode != 0 {
+		t.Fatalf("second exit code = %d, want 0", secondResult.ExitCode)
 	}
 }
 
