@@ -178,15 +178,13 @@ func (s *Server) releaseConnection(role, sessionID string, conn *websocket.Conn)
 	var peer *websocket.Conn
 	if role == "host" && tunnelSession.host == conn {
 		peer = tunnelSession.client
-		tunnelSession.host = nil
-		tunnelSession.hostReserved = false
 	} else if role == "client" && tunnelSession.client == conn {
 		peer = tunnelSession.host
-		tunnelSession.client = nil
-		tunnelSession.clientReserved = false
+	} else {
+		return nil
 	}
 
-	s.deleteEmptySession(sessionID, tunnelSession)
+	delete(s.sessions, sessionID)
 	return peer
 }
 

@@ -124,6 +124,55 @@ func TestSecondClientForSameSessionIsRejected(t *testing.T) {
 	}
 }
 
+func TestClientDisconnectClosesHostAndRemovesSession(t *testing.T) {
+	server := NewServer()
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	host := dialTunnel(t, httpServer.URL, "host", "s1")
+	client := dialTunnel(t, httpServer.URL, "client", "s1")
+
+	if err := client.Close(); err != nil {
+		t.Fatalf("close client: %v", err)
+	}
+	_, _, err := readMessage(t, host)
+	if err == nil {
+		t.Fatalf("expected host read to fail after paired client disconnect")
+	}
+
+	_, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL, "client", "s1"), nil)
+	if err == nil {
+		t.Fatalf("expected new client without a new host to fail")
+	}
+	if response == nil {
+		t.Fatalf("expected rejection response")
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusSwitchingProtocols {
+		t.Fatalf("expected non-101 rejection response")
+	}
+}
+
+func TestCleanupRemovesWholeSessionAtomically(t *testing.T) {
+	server := NewServer()
+	host := &websocket.Conn{}
+	client := &websocket.Conn{}
+	server.sessions["s1"] = &session{
+		host:           host,
+		client:         client,
+		hostReserved:   true,
+		clientReserved: true,
+	}
+
+	peer := server.releaseConnection("client", "s1", client)
+	if peer != host {
+		t.Fatalf("peer mismatch: got %p want %p", peer, host)
+	}
+	if _, ok := server.sessions["s1"]; ok {
+		t.Fatalf("expected cleanup to remove whole session")
+	}
+}
+
 func TestClientBeforeHostIsRejected(t *testing.T) {
 	server := NewServer()
 	httpServer := httptest.NewServer(server.Handler())
