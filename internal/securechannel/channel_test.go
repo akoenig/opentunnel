@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"testing"
-
-	"github.com/flynn/noise"
 )
 
 func TestNKpsk0HandshakeEncryptsMultipleFrames(t *testing.T) {
@@ -42,6 +40,23 @@ func TestNKpsk0HandshakeEncryptsMultipleFrames(t *testing.T) {
 		if !bytes.Equal(plaintext, frame) {
 			t.Fatalf("plaintext mismatch: got %q want %q", plaintext, frame)
 		}
+
+		reply := append([]byte("ack:"), frame...)
+		replyCiphertext, err := host.Encrypt(reply)
+		if err != nil {
+			t.Fatalf("host encrypt: %v", err)
+		}
+		if bytes.Contains(replyCiphertext, reply) {
+			t.Fatalf("reply ciphertext contains plaintext frame %q", reply)
+		}
+
+		replyPlaintext, err := client.Decrypt(replyCiphertext)
+		if err != nil {
+			t.Fatalf("client decrypt: %v", err)
+		}
+		if !bytes.Equal(replyPlaintext, reply) {
+			t.Fatalf("reply plaintext mismatch: got %q want %q", replyPlaintext, reply)
+		}
 	}
 }
 
@@ -61,5 +76,3 @@ func testHandshakeConfig(t *testing.T) HandshakeConfig {
 		Features:       []string{"exec.v1", "stdoutStderr.v1"},
 	}
 }
-
-var _ = noise.DH25519
