@@ -62,6 +62,62 @@ func TestNKpsk0HandshakeEncryptsMultipleFrames(t *testing.T) {
 	}
 }
 
+func TestSplitNKpsk0HandshakeMatchesInMemoryChannel(t *testing.T) {
+	cfg := testHandshakeConfig(t)
+	hostKey, err := GenerateHostKeypair(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateHostKeypair: %v", err)
+	}
+
+	clientHS, err := NewClientHandshake(cfg, hostKey.Public)
+	if err != nil {
+		t.Fatalf("NewClientHandshake: %v", err)
+	}
+	hostHS, err := NewHostHandshake(cfg, hostKey)
+	if err != nil {
+		t.Fatalf("NewHostHandshake: %v", err)
+	}
+
+	msg1, err := clientHS.WriteMessage()
+	if err != nil {
+		t.Fatalf("client write message: %v", err)
+	}
+	msg2, host, err := hostHS.ReadMessage(msg1)
+	if err != nil {
+		t.Fatalf("host read message: %v", err)
+	}
+	client, err := clientHS.ReadMessage(msg2)
+	if err != nil {
+		t.Fatalf("client read message: %v", err)
+	}
+
+	frame := []byte("commandRequest:hostname")
+	ciphertext, err := client.Encrypt(frame)
+	if err != nil {
+		t.Fatalf("client encrypt: %v", err)
+	}
+	plaintext, err := host.Decrypt(ciphertext)
+	if err != nil {
+		t.Fatalf("host decrypt: %v", err)
+	}
+	if !bytes.Equal(plaintext, frame) {
+		t.Fatalf("host plaintext mismatch: got %q want %q", plaintext, frame)
+	}
+
+	reply := []byte("stdoutData:api-staging")
+	replyCiphertext, err := host.Encrypt(reply)
+	if err != nil {
+		t.Fatalf("host encrypt: %v", err)
+	}
+	replyPlaintext, err := client.Decrypt(replyCiphertext)
+	if err != nil {
+		t.Fatalf("client decrypt: %v", err)
+	}
+	if !bytes.Equal(replyPlaintext, reply) {
+		t.Fatalf("client plaintext mismatch: got %q want %q", replyPlaintext, reply)
+	}
+}
+
 func TestHandshakeFailsWithWrongClientSecret(t *testing.T) {
 	clientCfg := testHandshakeConfig(t)
 	hostCfg := clientCfg
