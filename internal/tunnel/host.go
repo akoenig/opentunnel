@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sync"
 
 	"github.com/gorilla/websocket"
 
@@ -111,14 +112,14 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	}
 
 	// M2 supports one command per client connection; callers can start a new host for another command.
+	sender := outputSender{}
 	result, err := command.Run(ctx, request.Command, func(chunk command.OutputChunk) {
-		frame, frameErr := encryptJSON(channel, message{Type: output, Stream: chunk.Stream, Data: chunk.Data})
-		if frameErr != nil {
-			return
-		}
-		conn.WriteMessage(websocket.BinaryMessage, frame)
+		sender.send(channel, conn.WriteMessage, chunk)
 	})
 	if err != nil {
+		return err
+	}
+	if err := sender.err(); err != nil {
 		return err
 	}
 
@@ -175,4 +176,34 @@ func handshakeConfig(sessionID string, relay string, clientSecret [securechannel
 		PermissionMode: "execute",
 		Features:       []string{"exec.v1", "stdoutStderr.v1"},
 	}
+}
+
+type outputSender struct {
+	mu      sync.Mutex
+	sendErr error
+}
+
+func (s *outputSender) send(channel *securechannel.Channel, writeMessage func(int, []byte) error, chunk command.OutputChunk) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.sendErr != nil {
+		return
+	}
+
+	frame, err := encryptJSON(channel, message{Type: output, Stream: chunk.Stream, Data: chunk.Data})
+	if err != nil {
+		s.sendErr = fmt.Errorf("encrypt output: %w", err)
+		return
+	}
+	if err := writeMessage(websocket.BinaryMessage, frame); err != nil {
+		s.sendErr = fmt.Errorf("write output: %w", err)
+	}
+}
+
+func (s *outputSender) err() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.sendErr
 }
