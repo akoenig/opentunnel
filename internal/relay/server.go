@@ -29,7 +29,10 @@ type CLIArtifacts struct {
 
 // ServerOptions configures a relay server with plan-defined options.
 type ServerOptions struct {
-	CLIArtifacts *CLIArtifacts
+	PublicURL    string
+	Version      string
+	ArtifactPath string
+	PlatformKey  string
 }
 
 // Option configures a relay server.
@@ -51,7 +54,7 @@ type session struct {
 
 // NewServer creates an in-memory relay server.
 func NewServer(opts ...Option) *Server {
-	server := NewServerWithOptions(ServerOptions{})
+	server := newServer()
 	for _, opt := range opts {
 		opt(server)
 	}
@@ -59,8 +62,36 @@ func NewServer(opts ...Option) *Server {
 }
 
 // NewServerWithOptions creates an in-memory relay server from explicit options.
-func NewServerWithOptions(options ServerOptions) *Server {
-	server := &Server{
+func NewServerWithOptions(options ServerOptions) (*Server, error) {
+	server := newServer()
+	if options.PublicURL == "" && options.Version == "" && options.ArtifactPath == "" && options.PlatformKey == "" {
+		return server, nil
+	}
+
+	artifacts := CLIArtifacts{
+		RelayOrigin: options.PublicURL,
+		Version:     options.Version,
+		PlatformKey: options.PlatformKey,
+		BinaryPath:  options.ArtifactPath,
+	}
+	checksum, err := artifact.SHA256File(artifacts.BinaryPath)
+	if err != nil {
+		return nil, fmt.Errorf("validate cli artifact: %w", err)
+	}
+	if _, err := artifact.RenderBootstrap(artifact.BootstrapConfig{
+		RelayOrigin: artifacts.RelayOrigin,
+		Version:     artifacts.Version,
+		PlatformKey: artifacts.PlatformKey,
+		Checksum:    checksum,
+	}); err != nil {
+		return nil, fmt.Errorf("validate cli artifact: %w", err)
+	}
+	server.cliArtifacts = &artifacts
+	return server, nil
+}
+
+func newServer() *Server {
+	return &Server{
 		sessions: make(map[string]*session),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -68,11 +99,6 @@ func NewServerWithOptions(options ServerOptions) *Server {
 			},
 		},
 	}
-	if options.CLIArtifacts != nil {
-		artifacts := *options.CLIArtifacts
-		server.cliArtifacts = &artifacts
-	}
-	return server
 }
 
 // Handler returns the HTTP handler for the relay tunnel endpoint.

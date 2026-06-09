@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -25,7 +26,8 @@ func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 		"/cli/bin/opentunnel-dev-linux-amd64.sha256",
 		"umask 077",
 		"${TMPDIR:-/tmp}",
-		"mktemp -d \"${TMPDIR:-/tmp}/opentunnel-cli.XXXXXX\"",
+		"id -u",
+		"cache_base=\"${TMPDIR:-/tmp}/opentunnel-cli-${uid}\"",
 		"sha256sum",
 		"shasum -a 256",
 		"chmod 700",
@@ -127,6 +129,9 @@ func TestRenderBootstrapFailsClosedWhenChecksumToolsAreMissing(t *testing.T) {
 	writeExecutable(t, filepath.Join(toolsDir, "mktemp"), `#!/bin/sh
 exec /usr/bin/mktemp "$@"
 `)
+	writeExecutable(t, filepath.Join(toolsDir, "id"), `#!/bin/sh
+exec /usr/bin/id "$@"
+`)
 	writeExecutable(t, filepath.Join(toolsDir, "curl"), `#!/bin/sh
 out=
 while [ "$#" -gt 0 ]; do
@@ -185,7 +190,7 @@ func TestRenderBootstrapDoesNotExecutePoisonedCache(t *testing.T) {
 	script := renderBootstrapForTest(t)
 	runDir := t.TempDir()
 	tmpDir := filepath.Join(runDir, "tmp")
-	bin := filepath.Join(tmpDir, "opentunnel-cli", "linux-amd64", "dev", "expected-checksum", "opentunnel")
+	bin := filepath.Join(tmpDir, "opentunnel-cli-"+uidForTest(), "linux-amd64", "dev", "expected-checksum", "opentunnel")
 	writeExecutable(t, bin, `#!/bin/sh
 printf 'POISON_CACHE_EXECUTED\n'
 `)
@@ -265,7 +270,7 @@ func TestRenderBootstrapDoesNotUsePrecreatedPredictableCache(t *testing.T) {
 	script := renderBootstrapForTest(t)
 	runDir := t.TempDir()
 	tmpDir := filepath.Join(runDir, "tmp")
-	bin := filepath.Join(tmpDir, "opentunnel-cli", "linux-amd64", "dev", "expected-checksum", "opentunnel")
+	bin := filepath.Join(tmpDir, "opentunnel-cli-"+uidForTest(), "linux-amd64", "dev", "expected-checksum", "opentunnel")
 	writeExecutable(t, bin, `#!/bin/sh
 printf 'PREDICTABLE_CACHE_EXECUTED\n'
 `)
@@ -303,8 +308,8 @@ func TestRenderBootstrapReusesVerifiedPrivateCache(t *testing.T) {
 	script := renderBootstrapForTest(t)
 	runDir := t.TempDir()
 	toolsDir := t.TempDir()
-	cacheDir := filepath.Join(runDir, "cache")
 	tmpDir := filepath.Join(runDir, "tmp")
+	cacheRoot := filepath.Join(tmpDir, "opentunnel-cli-"+uidForTest())
 	binaryDownloads := filepath.Join(runDir, "binary-downloads")
 	checksumCalls := filepath.Join(runDir, "checksum-calls")
 	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
@@ -351,7 +356,6 @@ printf 'expected-checksum  %s\n' "$1"
 		cmd.Dir = runDir
 		cmd.Env = []string{
 			"PATH=" + toolsDir + ":/usr/bin:/bin",
-			"XDG_CACHE_HOME=" + cacheDir,
 			"HOME=",
 			"TMPDIR=" + tmpDir,
 			"BINARY_DOWNLOADS=" + binaryDownloads,
@@ -372,6 +376,17 @@ printf 'expected-checksum  %s\n' "$1"
 	if got := strings.TrimSpace(readTestFile(t, checksumCalls)); got != "2" {
 		t.Fatalf("checksum verification count = %q, want 2", got)
 	}
+	info, err := os.Stat(cacheRoot)
+	if err != nil {
+		t.Fatalf("Stat cache root returned error: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("cache root permissions = %o, want 700", got)
+	}
+}
+
+func uidForTest() string {
+	return strconv.Itoa(os.Getuid())
 }
 
 func renderBootstrapForTest(t *testing.T) string {

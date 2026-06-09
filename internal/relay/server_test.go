@@ -59,14 +59,15 @@ func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
 	binary := []byte("server options binary")
 	binaryPath := writeTestBinary(t, binary)
 	checksum := testSHA256(binary)
-	server := NewServerWithOptions(ServerOptions{
-		CLIArtifacts: &CLIArtifacts{
-			RelayOrigin: "https://relay.example.com",
-			Version:     "4.5.6",
-			PlatformKey: "linux-arm64",
-			BinaryPath:  binaryPath,
-		},
+	server, err := NewServerWithOptions(ServerOptions{
+		PublicURL:    "https://relay.example.com",
+		Version:      "4.5.6",
+		ArtifactPath: binaryPath,
+		PlatformKey:  "linux-arm64",
 	})
+	if err != nil {
+		t.Fatalf("NewServerWithOptions() error = %v", err)
+	}
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
@@ -95,6 +96,66 @@ func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
 	}
 	if got := strings.TrimSpace(string(checksumBody)); got != checksum {
 		t.Fatalf("checksum body mismatch: got %q want %q", got, checksum)
+	}
+}
+
+func TestNewServerWithOptionsRejectsInvalidCLIArtifactOptions(t *testing.T) {
+	binaryPath := writeTestBinary(t, []byte("binary bytes"))
+	tests := []struct {
+		name    string
+		options ServerOptions
+	}{
+		{
+			name: "public url without artifact path",
+			options: ServerOptions{
+				PublicURL:   "https://relay.example.com",
+				Version:     "1.2.3",
+				PlatformKey: "linux-amd64",
+			},
+		},
+		{
+			name: "public url without version",
+			options: ServerOptions{
+				PublicURL:    "https://relay.example.com",
+				ArtifactPath: binaryPath,
+				PlatformKey:  "linux-amd64",
+			},
+		},
+		{
+			name: "public url without platform key",
+			options: ServerOptions{
+				PublicURL:    "https://relay.example.com",
+				Version:      "1.2.3",
+				ArtifactPath: binaryPath,
+			},
+		},
+		{
+			name: "invalid public url",
+			options: ServerOptions{
+				PublicURL:    "https://relay.example.com/path",
+				Version:      "1.2.3",
+				ArtifactPath: binaryPath,
+				PlatformKey:  "linux-amd64",
+			},
+		},
+		{
+			name: "missing artifact file",
+			options: ServerOptions{
+				PublicURL:    "https://relay.example.com",
+				Version:      "1.2.3",
+				ArtifactPath: filepath.Join(t.TempDir(), "missing-opentunnel"),
+				PlatformKey:  "linux-amd64",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewServerWithOptions(tt.options)
+			if err == nil {
+				t.Fatal("NewServerWithOptions() error = nil, want error")
+			}
+		})
 	}
 }
 

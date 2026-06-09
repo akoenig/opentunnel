@@ -205,12 +205,16 @@ func isShellSafeURLHost(host string) bool {
 func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
 	relayServer := relay.NewServer()
 	if cmd.publicURL != "" {
-		artifacts, err := buildRelayCLIArtifacts(cmd.publicURL, cmd.artifactPath, cmd.version, artifact.CurrentPlatformKey)
+		options, err := buildRelayServerOptions(cmd.publicURL, cmd.artifactPath, cmd.version, artifact.CurrentPlatformKey)
 		if err != nil {
 			fmt.Fprintf(stderr, "start relay: %v\n", err)
 			return 1
 		}
-		relayServer = relay.NewServer(relay.WithCLIArtifacts(artifacts))
+		relayServer, err = relay.NewServerWithOptions(options)
+		if err != nil {
+			fmt.Fprintf(stderr, "start relay: %v\n", err)
+			return 1
+		}
 	}
 
 	server := &http.Server{Addr: cmd.listen, Handler: relayServer.Handler()}
@@ -264,16 +268,16 @@ func (cmd createCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wr
 	}
 }
 
-func buildRelayCLIArtifacts(publicURL string, artifactPath string, version string, platformKey func() (string, error)) (relay.CLIArtifacts, error) {
+func buildRelayServerOptions(publicURL string, artifactPath string, version string, platformKey func() (string, error)) (relay.ServerOptions, error) {
 	key, err := platformKey()
 	if err != nil {
-		return relay.CLIArtifacts{}, fmt.Errorf("resolve platform: %w", err)
+		return relay.ServerOptions{}, fmt.Errorf("resolve platform: %w", err)
 	}
-	return relay.CLIArtifacts{
-		RelayOrigin: publicURL,
-		Version:     version,
-		PlatformKey: key,
-		BinaryPath:  artifactPath,
+	return relay.ServerOptions{
+		PublicURL:    publicURL,
+		Version:      version,
+		ArtifactPath: artifactPath,
+		PlatformKey:  key,
 	}, nil
 }
 

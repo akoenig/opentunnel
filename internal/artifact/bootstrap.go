@@ -46,22 +46,23 @@ platform=%s
 expected_checksum=%s
 binary_url="${relay_origin}"%s
 checksum_url="${relay_origin}"%s
-cache_root=
-cache_base=
-if [ "${XDG_CACHE_HOME:-}" != "" ]; then
-  cache_base=$XDG_CACHE_HOME
-elif [ "${HOME:-}" != "" ]; then
-  cache_base="${HOME}/.cache"
-else
-  cache_root=$(mktemp -d "${TMPDIR:-/tmp}/opentunnel-cli.XXXXXX")
-  cache_base=$cache_root
+if ! uid=$(id -u 2>/dev/null); then
+  printf 'opentunnel: cannot determine current user id\n' >&2
+  exit 1
 fi
-cache_dir="${cache_base}/opentunnel-cli/${platform}/${version}/${expected_checksum}"
+cache_base="${TMPDIR:-/tmp}/opentunnel-cli-${uid}"
+if [ -e "$cache_base" ] && [ ! -d "$cache_base" ]; then
+  printf 'opentunnel: cache root is not a directory\n' >&2
+  exit 1
+fi
+mkdir -p "$cache_base"
+chmod 700 "$cache_base"
+cache_dir="${cache_base}/${platform}/${version}/${expected_checksum}"
 bin="${cache_dir}/opentunnel"
 download_root=$(mktemp -d "${TMPDIR:-/tmp}/opentunnel-cli-download.XXXXXX")
 tmp_bin="${download_root}/opentunnel.download"
 tmp_checksum="${download_root}/opentunnel.sha256"
-trap 'if [ "$cache_root" != "" ]; then rm -rf "$cache_root"; fi; rm -rf "$download_root"' EXIT HUP INT TERM
+trap 'rm -rf "$download_root"' EXIT HUP INT TERM
 
 checksum_file() {
   if command -v sha256sum >/dev/null 2>&1; then

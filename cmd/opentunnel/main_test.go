@@ -133,25 +133,25 @@ func TestParseArgsRelayRejectsUnsafePublicURLOrigin(t *testing.T) {
 	}
 }
 
-func TestBuildRelayCLIArtifactsUsesSuppliedArtifactCoordinates(t *testing.T) {
-	artifacts, err := buildRelayCLIArtifacts("http://localhost:8080", "/tmp/custom-opentunnel", "1.2.3", func() (string, error) {
+func TestBuildRelayServerOptionsUsesSuppliedArtifactCoordinates(t *testing.T) {
+	options, err := buildRelayServerOptions("http://localhost:8080", "/tmp/custom-opentunnel", "1.2.3", func() (string, error) {
 		return "testos-testarch", nil
 	})
 	if err != nil {
-		t.Fatalf("buildRelayCLIArtifacts() error = %v", err)
+		t.Fatalf("buildRelayServerOptions() error = %v", err)
 	}
 
-	if artifacts.RelayOrigin != "http://localhost:8080" {
-		t.Fatalf("RelayOrigin = %q, want %q", artifacts.RelayOrigin, "http://localhost:8080")
+	if options.PublicURL != "http://localhost:8080" {
+		t.Fatalf("PublicURL = %q, want %q", options.PublicURL, "http://localhost:8080")
 	}
-	if artifacts.Version != "1.2.3" {
-		t.Fatalf("Version = %q, want %q", artifacts.Version, "1.2.3")
+	if options.Version != "1.2.3" {
+		t.Fatalf("Version = %q, want %q", options.Version, "1.2.3")
 	}
-	if artifacts.PlatformKey != "testos-testarch" {
-		t.Fatalf("PlatformKey = %q, want %q", artifacts.PlatformKey, "testos-testarch")
+	if options.PlatformKey != "testos-testarch" {
+		t.Fatalf("PlatformKey = %q, want %q", options.PlatformKey, "testos-testarch")
 	}
-	if artifacts.BinaryPath != "/tmp/custom-opentunnel" {
-		t.Fatalf("BinaryPath = %q, want %q", artifacts.BinaryPath, "/tmp/custom-opentunnel")
+	if options.ArtifactPath != "/tmp/custom-opentunnel" {
+		t.Fatalf("ArtifactPath = %q, want %q", options.ArtifactPath, "/tmp/custom-opentunnel")
 	}
 }
 
