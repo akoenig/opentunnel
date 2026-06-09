@@ -232,6 +232,15 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	sender := outputSender{maxOutputBytes: maxOutputBytes, logger: logger}
 	commandCtx, cancel := context.WithTimeout(ctx, effectiveCommandTimeout(commandTimeout))
 	defer cancel()
+	go func() {
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				cancel()
+				return
+			}
+		}
+	}()
 	logger.log("commandStart")
 	result, err := command.Run(commandCtx, request.Command, func(chunk command.OutputChunk) {
 		sender.send(channel, conn.WriteMessage, chunk)
@@ -248,6 +257,8 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 			if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeCommandTimeout, "Command exceeded timeout."); sendErr != nil {
 				return sendErr
 			}
+		} else if errors.Is(err, context.Canceled) && ctx.Err() == nil {
+			return nil
 		} else if ctx.Err() == nil {
 			if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeCommandStartFailed, "Command failed to start."); sendErr != nil {
 				return sendErr

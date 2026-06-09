@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -260,6 +261,76 @@ func TestExecMaxOutputExceededCancelsCommandPromptly(t *testing.T) {
 	case <-session.Done:
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("host command continued running after output limit was exceeded")
+	}
+}
+
+func TestClientDisconnectCancelsSilentCommandPromptly(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{
+		RelayURL:       relayURL(server.URL),
+		CommandTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	marker := t.TempDir() + "/disconnected-command-marker"
+	conn, channel := connectTestClient(t, session.Invite)
+	request, err := encryptJSON(channel, message{Type: commandRequest, Command: "sleep 2; printf done > " + marker})
+	if err != nil {
+		conn.Close()
+		t.Fatalf("encrypt command request: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.BinaryMessage, request); err != nil {
+		conn.Close()
+		t.Fatalf("write command request: %v", err)
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatalf("close client connection: %v", err)
+	}
+
+	started := time.Now()
+	var stdout bytes.Buffer
+	var result ExecResult
+	deadline := time.Now().Add(700 * time.Millisecond)
+	for {
+		stdout.Reset()
+		result, err = Exec(ctx, ExecConfig{
+			Invite:  session.Invite,
+			Command: "printf ready",
+			Stdout:  &stdout,
+		})
+		if err == nil {
+			break
+		}
+		select {
+		case hostErr := <-session.Done:
+			t.Fatalf("host stopped before reconnect after disconnect: %v", hostErr)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("second exec after disconnect: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if elapsed := time.Since(started); elapsed > 700*time.Millisecond {
+		t.Fatalf("second exec completed after %s, want prompt disconnect cancellation", elapsed)
+	}
+	if stdout.String() != "ready" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "ready")
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0", result.ExitCode)
+	}
+
+	time.Sleep(2100 * time.Millisecond)
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("marker stat error = %v, want marker not created", err)
 	}
 }
 
