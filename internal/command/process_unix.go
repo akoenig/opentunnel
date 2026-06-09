@@ -6,7 +6,10 @@ import (
 	"errors"
 	"os/exec"
 	"syscall"
+	"time"
 )
+
+const processCleanupGracePeriod = 100 * time.Millisecond
 
 func configureCommandCleanup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -14,7 +17,12 @@ func configureCommandCleanup(cmd *exec.Cmd) {
 		if cmd.Process == nil {
 			return nil
 		}
-		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		processGroupID := -cmd.Process.Pid
+		if err := syscall.Kill(processGroupID, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+			return err
+		}
+		time.Sleep(processCleanupGracePeriod)
+		if err := syscall.Kill(processGroupID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 			return err
 		}
 		return nil

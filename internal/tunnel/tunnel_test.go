@@ -220,6 +220,49 @@ func TestExecMaxOutputExceeded(t *testing.T) {
 	}
 }
 
+func TestExecMaxOutputExceededCancelsCommandPromptly(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{
+		RelayURL:       relayURL(server.URL),
+		MaxOutputBytes: 5,
+		CommandTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	started := time.Now()
+	result, err := Exec(ctx, ExecConfig{
+		Invite:  session.Invite,
+		Command: "printf 123456789; sleep 2",
+	})
+	elapsed := time.Since(started)
+
+	if err == nil {
+		t.Fatal("exec returned nil error, want max output exceeded error")
+	}
+	if result.ExitCode == 0 {
+		t.Fatalf("exit code = %d, want non-zero", result.ExitCode)
+	}
+	if !strings.Contains(err.Error(), string(ErrorTypeMaxOutputExceeded)) {
+		t.Fatalf("exec error = %v, want %s", err, ErrorTypeMaxOutputExceeded)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("exec returned after %s, want prompt output-limit cancellation", elapsed)
+	}
+
+	select {
+	case <-session.Done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("host command continued running after output limit was exceeded")
+	}
+}
+
 func TestHostIdleTimeout(t *testing.T) {
 	server := httptest.NewServer(relay.NewServer().Handler())
 	defer server.Close()
@@ -404,6 +447,66 @@ func TestHostIdleTimeoutRestartsAfterCommandWhenClientKeepsSocketOpen(t *testing
 	}
 }
 
+func TestHostSendsCommandStartFailedErrorForRunFailure(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{RelayURL: relayURL(server.URL)})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	conn, channel := connectTestClient(t, session.Invite)
+	defer conn.Close()
+
+	request, err := encryptJSON(channel, message{Type: commandRequest, Command: " "})
+	if err != nil {
+		t.Fatalf("encrypt command request: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.BinaryMessage, request); err != nil {
+		t.Fatalf("write command request: %v", err)
+	}
+
+	msg := readEncryptedTestMessage(t, conn, channel)
+	if msg.Type != errorMessage {
+		t.Fatalf("message type = %q, want error", msg.Type)
+	}
+	if msg.ErrorType != ErrorTypeCommandStartFailed {
+		t.Fatalf("error type = %q, want %q", msg.ErrorType, ErrorTypeCommandStartFailed)
+	}
+}
+
+func TestHostSendsProtocolErrorForMalformedEncryptedMessage(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{RelayURL: relayURL(server.URL)})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	conn, channel := connectTestClient(t, session.Invite)
+	defer conn.Close()
+
+	if err := conn.WriteMessage(websocket.BinaryMessage, []byte("not encrypted tunnel json")); err != nil {
+		t.Fatalf("write malformed message: %v", err)
+	}
+
+	msg := readEncryptedTestMessage(t, conn, channel)
+	if msg.Type != errorMessage {
+		t.Fatalf("message type = %q, want error", msg.Type)
+	}
+	if msg.ErrorType != ErrorTypeProtocol {
+		t.Fatalf("error type = %q, want %q", msg.ErrorType, ErrorTypeProtocol)
+	}
+}
+
 func TestOutputSenderRecordsFirstErrorAndSkipsLaterWrites(t *testing.T) {
 	channel := testHostChannel(t)
 	sender := outputSender{}
@@ -521,6 +624,20 @@ func connectTestClient(t *testing.T, inviteCode string) (*websocket.Conn, *secur
 		t.Fatalf("read handshake message: %v", err)
 	}
 	return conn, channel
+}
+
+func readEncryptedTestMessage(t *testing.T, conn *websocket.Conn, channel *securechannel.Channel) message {
+	t.Helper()
+
+	_, encrypted, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read tunnel message: %v", err)
+	}
+	msg, err := decryptJSON(channel, encrypted)
+	if err != nil {
+		t.Fatalf("decrypt tunnel message: %v", err)
+	}
+	return msg
 }
 
 func testHostChannel(t *testing.T) *securechannel.Channel {

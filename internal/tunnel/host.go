@@ -214,10 +214,17 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	}
 	request, err := decryptJSON(channel, encryptedRequest)
 	if err != nil {
+		if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeProtocol, "Invalid encrypted tunnel message."); sendErr != nil {
+			return sendErr
+		}
 		return err
 	}
 	if request.Type != commandRequest || request.Command == "" {
-		return fmt.Errorf("unexpected tunnel message type %q", request.Type)
+		err := fmt.Errorf("unexpected tunnel message type %q", request.Type)
+		if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeProtocol, "Unexpected tunnel message."); sendErr != nil {
+			return sendErr
+		}
+		return err
 	}
 	stopIdle()
 
@@ -228,11 +235,21 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	logger.log("commandStart")
 	result, err := command.Run(commandCtx, request.Command, func(chunk command.OutputChunk) {
 		sender.send(channel, conn.WriteMessage, chunk)
+		if sender.err() != nil {
+			cancel()
+		}
 	})
 	if err != nil {
+		if senderErr := sender.err(); senderErr != nil {
+			return senderErr
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			logger.log("commandTimeout")
-			if sendErr := sendCommandTimeout(channel, conn.WriteMessage); sendErr != nil {
+			if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeCommandTimeout, "Command exceeded timeout."); sendErr != nil {
+				return sendErr
+			}
+		} else if ctx.Err() == nil {
+			if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeCommandStartFailed, "Command failed to start."); sendErr != nil {
 				return sendErr
 			}
 		}
@@ -274,17 +291,17 @@ func effectiveMaxOutputBytes(maxOutputBytes int) int {
 	return maxOutputBytes
 }
 
-func sendCommandTimeout(channel *securechannel.Channel, writeMessage func(int, []byte) error) error {
+func sendError(channel *securechannel.Channel, writeMessage func(int, []byte) error, errorType ErrorType, text string) error {
 	frame, err := encryptJSON(channel, message{
 		Type:      errorMessage,
-		ErrorType: ErrorTypeCommandTimeout,
-		Message:   "Command exceeded timeout.",
+		ErrorType: errorType,
+		Message:   text,
 	})
 	if err != nil {
 		return err
 	}
 	if err := writeMessage(websocket.BinaryMessage, frame); err != nil {
-		return fmt.Errorf("write command timeout: %w", err)
+		return fmt.Errorf("write %s: %w", errorType, err)
 	}
 	return nil
 }
