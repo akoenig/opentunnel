@@ -3,24 +3,36 @@ package securechannel
 import "errors"
 
 const (
+	// PatternNKpsk0 is the Noise NK pattern with PSK in message position 0.
 	PatternNKpsk0 = "Noise_NKpsk0_25519_ChaChaPoly_BLAKE2s"
+	// PatternXXpsk3 is the Noise XX pattern with PSK in message position 3.
 	PatternXXpsk3 = "Noise_XXpsk3_25519_ChaChaPoly_BLAKE2s"
 
+	// SelectedPattern is the Noise pattern used by the secure-channel spike.
 	SelectedPattern = PatternNKpsk0
 
-	ClientSecretSize          = 32
-	CommandTimeoutSeconds     = 120
-	MaxOutputBytes            = 10 * 1024 * 1024
+	// ClientSecretSize is the required byte length for client PSK material.
+	ClientSecretSize = 32
+	// CommandTimeoutSeconds is the default command execution timeout.
+	CommandTimeoutSeconds = 120
+	// MaxOutputBytes is the default maximum command output size.
+	MaxOutputBytes = 10 * 1024 * 1024
+	// IdleSessionTimeoutSeconds is the default idle session timeout.
 	IdleSessionTimeoutSeconds = 1800
 )
 
 var (
+	// ErrInvalidClientSecret reports malformed client secret material.
 	ErrInvalidClientSecret = errors.New("invalid client secret")
-	ErrHostKeyMismatch     = errors.New("host public key mismatch")
-	ErrHandshakeFailed     = errors.New("handshake failed")
-	ErrProtocol            = errors.New("protocol error")
+	// ErrHostKeyMismatch reports a host public key verification failure.
+	ErrHostKeyMismatch = errors.New("host public key mismatch")
+	// ErrHandshakeFailed reports an unsuccessful secure-channel handshake.
+	ErrHandshakeFailed = errors.New("handshake failed")
+	// ErrProtocol reports malformed or unexpected secure-channel protocol data.
+	ErrProtocol = errors.New("protocol error")
 )
 
+// CommandDefaults describes default command-execution limits bound into the prologue.
 type CommandDefaults struct {
 	TimeoutSeconds            int
 	MaxOutputBytes            int
@@ -28,6 +40,7 @@ type CommandDefaults struct {
 	IdleSessionTimeoutSeconds int
 }
 
+// PrologueConfig contains stable values authenticated by the Noise prologue.
 type PrologueConfig struct {
 	App             string
 	InviteVersion   byte
@@ -39,6 +52,7 @@ type PrologueConfig struct {
 	Features        []string
 }
 
+// HandshakeConfig contains caller-provided inputs for secure-channel setup.
 type HandshakeConfig struct {
 	SessionID      string
 	RelayOrigin    string
@@ -47,6 +61,7 @@ type HandshakeConfig struct {
 	Features       []string
 }
 
+// DefaultCommandDefaults returns command limits used when building a prologue.
 func DefaultCommandDefaults() CommandDefaults {
 	return CommandDefaults{
 		TimeoutSeconds:            CommandTimeoutSeconds,
@@ -56,6 +71,7 @@ func DefaultCommandDefaults() CommandDefaults {
 	}
 }
 
+// NewPrologueConfig derives authenticated prologue values from handshake inputs.
 func NewPrologueConfig(cfg HandshakeConfig) PrologueConfig {
 	return PrologueConfig{
 		App:             "OpenTunnel",
