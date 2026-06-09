@@ -87,10 +87,46 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 	}
 }
 
+func TestRenderBootstrapRejectsInvalidRelayOrigins(t *testing.T) {
+	tests := []struct {
+		name        string
+		relayOrigin string
+	}{
+		{name: "leading dash", relayOrigin: "-http://relay.example"},
+		{name: "missing scheme", relayOrigin: "relay.example"},
+		{name: "missing host", relayOrigin: "https://"},
+		{name: "non http scheme", relayOrigin: "file://relay.example"},
+		{name: "path", relayOrigin: "https://relay.example/cli"},
+		{name: "query", relayOrigin: "https://relay.example?token=abc"},
+		{name: "fragment", relayOrigin: "https://relay.example#cli"},
+		{name: "userinfo", relayOrigin: "https://user:pass@relay.example"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := RenderBootstrap(BootstrapConfig{
+				RelayOrigin: tt.relayOrigin,
+				Version:     "dev",
+				PlatformKey: "linux-amd64",
+				Checksum:    "abc123",
+			})
+			if err == nil {
+				t.Fatal("RenderBootstrap returned nil error")
+			}
+			if !strings.Contains(err.Error(), "relay origin") {
+				t.Fatalf("RenderBootstrap error %q does not mention relay origin", err)
+			}
+		})
+	}
+}
+
 func TestRenderBootstrapFailsClosedWhenChecksumToolsAreMissing(t *testing.T) {
 	script := renderBootstrapForTest(t)
 	runDir := t.TempDir()
 	toolsDir := t.TempDir()
+	writeExecutable(t, filepath.Join(toolsDir, "mktemp"), `#!/bin/sh
+exec /usr/bin/mktemp "$@"
+`)
 	writeExecutable(t, filepath.Join(toolsDir, "curl"), `#!/bin/sh
 out=
 while [ "$#" -gt 0 ]; do
@@ -101,7 +137,7 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "$out" in
-  *.sha256.*) printf 'expected-checksum  opentunnel\n' > "$out" ;;
+  *.sha256) printf 'expected-checksum  opentunnel\n' > "$out" ;;
   *) printf '#!/bin/sh\nprintf '\''EXECUTED_WITHOUT_HASH\n'\''\n' > "$out" ;;
 esac
 `)
@@ -131,7 +167,7 @@ exec /usr/bin/rm "$@"
 	cmd.Dir = runDir
 	cmd.Env = []string{
 		"PATH=" + toolsDir,
-		"TMPDIR=" + filepath.Join(runDir, "tmp"),
+		"TMPDIR=" + runDir,
 	}
 	output, err := cmd.CombinedOutput()
 	if err == nil {
@@ -139,6 +175,9 @@ exec /usr/bin/rm "$@"
 	}
 	if strings.Contains(string(output), "EXECUTED_WITHOUT_HASH") {
 		t.Fatalf("bootstrap executed downloaded binary without a checksum tool; output:\n%s", output)
+	}
+	if !strings.Contains(string(output), "sha256sum or shasum is required") {
+		t.Fatalf("bootstrap failed before checksum tool selection; output:\n%s", output)
 	}
 }
 

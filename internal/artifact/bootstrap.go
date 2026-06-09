@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -17,6 +18,9 @@ type BootstrapConfig struct {
 func RenderBootstrap(cfg BootstrapConfig) (string, error) {
 	if cfg.RelayOrigin == "" {
 		return "", fmt.Errorf("relay origin is required")
+	}
+	if err := validateRelayOrigin(cfg.RelayOrigin); err != nil {
+		return "", err
 	}
 	if cfg.Version == "" {
 		return "", fmt.Errorf("version is required")
@@ -97,6 +101,28 @@ exec "$bin" "$@"
 `, shellQuote(cfg.RelayOrigin), shellQuote(cfg.Version), shellQuote(cfg.PlatformKey), shellQuote(cfg.Checksum), shellQuote(binaryPath), shellQuote(checksumPath))
 
 	return script, nil
+}
+
+func validateRelayOrigin(relayOrigin string) error {
+	if strings.HasPrefix(relayOrigin, "-") {
+		return fmt.Errorf("relay origin must be an http or https origin")
+	}
+
+	parsed, err := url.Parse(relayOrigin)
+	if err != nil {
+		return fmt.Errorf("relay origin must be an http or https origin: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("relay origin must use http or https")
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("relay origin must include a host")
+	}
+	if parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		return fmt.Errorf("relay origin must not include userinfo, path, query, or fragment")
+	}
+
+	return nil
 }
 
 func shellQuote(value string) string {
