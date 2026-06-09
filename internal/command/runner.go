@@ -44,17 +44,18 @@ func Run(ctx context.Context, command string, onChunk func(OutputChunk)) (Result
 		return Result{}, fmt.Errorf("start command: %w", err)
 	}
 
-	var wg sync.WaitGroup
+	var readers sync.WaitGroup
+	chunks := make(chan OutputChunk)
 	streamErrors := make(chan error, 2)
 	copyOutput := func(stream string, reader io.Reader) {
-		defer wg.Done()
+		defer readers.Done()
 		buffer := make([]byte, 4096)
 		for {
 			count, readErr := reader.Read(buffer)
-			if count > 0 && onChunk != nil {
+			if count > 0 {
 				data := make([]byte, count)
 				copy(data, buffer[:count])
-				onChunk(OutputChunk{Stream: stream, Data: data})
+				chunks <- OutputChunk{Stream: stream, Data: data}
 			}
 			if readErr != nil {
 				if !errors.Is(readErr, io.EOF) {
@@ -65,13 +66,25 @@ func Run(ctx context.Context, command string, onChunk func(OutputChunk)) (Result
 		}
 	}
 
-	wg.Add(2)
+	readers.Add(2)
 	go copyOutput("stdout", stdout)
 	go copyOutput("stderr", stderr)
+	go func() {
+		readers.Wait()
+		close(chunks)
+		close(streamErrors)
+	}()
+
+	for chunk := range chunks {
+		if onChunk != nil {
+			onChunk(chunk)
+		}
+	}
 
 	waitErr := cmd.Wait()
-	wg.Wait()
-	close(streamErrors)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return Result{}, fmt.Errorf("command canceled: %w", ctxErr)
+	}
 
 	for streamErr := range streamErrors {
 		if streamErr != nil {
@@ -81,9 +94,6 @@ func Run(ctx context.Context, command string, onChunk func(OutputChunk)) (Result
 
 	if waitErr == nil {
 		return Result{ExitCode: 0}, nil
-	}
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return Result{}, fmt.Errorf("command canceled: %w", ctxErr)
 	}
 	var exitErr *exec.ExitError
 	if errors.As(waitErr, &exitErr) {

@@ -3,7 +3,9 @@ package command
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestRunCapturesStdoutChunk(t *testing.T) {
@@ -51,6 +53,29 @@ func TestRunCapturesStderrSeparately(t *testing.T) {
 	}
 	if string(chunks[0].Data) != "err" {
 		t.Fatalf("Data = %q, want err", string(chunks[0].Data))
+	}
+}
+
+func TestRunSerializesOutputCallbacks(t *testing.T) {
+	var inCallback atomic.Bool
+	var concurrentCallback atomic.Bool
+
+	result, err := Run(context.Background(), "i=0; while [ \"$i\" -lt 100 ]; do printf o; printf e >&2; i=$((i + 1)); done", func(OutputChunk) {
+		if inCallback.Swap(true) {
+			concurrentCallback.Store(true)
+		}
+		time.Sleep(time.Millisecond)
+		inCallback.Store(false)
+	})
+
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+	if concurrentCallback.Load() {
+		t.Fatal("onChunk was invoked concurrently")
 	}
 }
 
