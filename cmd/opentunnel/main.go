@@ -183,7 +183,7 @@ func (cmd createCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wr
 	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 
-	session, err := tunnel.StartHost(signalCtx, tunnel.HostConfig{RelayURL: relayURL})
+	session, err := tunnel.StartHost(signalCtx, tunnel.HostConfig{RelayURL: relayURL, LogWriter: stderr})
 	if err != nil {
 		fmt.Fprintf(stderr, "create: %v\n", err)
 		return 1

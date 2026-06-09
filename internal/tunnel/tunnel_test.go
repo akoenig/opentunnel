@@ -218,6 +218,89 @@ func TestExecMaxOutputExceeded(t *testing.T) {
 	}
 }
 
+func TestHostIdleTimeout(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{
+		RelayURL:    relayURL(server.URL),
+		IdleTimeout: 50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	select {
+	case err := <-session.Done:
+		if err == nil {
+			t.Fatal("host stopped without error, want idle timeout error")
+		}
+		if !strings.Contains(err.Error(), string(ErrorTypeIdleSessionTimeout)) {
+			t.Fatalf("host error = %v, want %s", err, ErrorTypeIdleSessionTimeout)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("host did not stop after idle timeout")
+	}
+}
+
+func TestHostLocalStatusLogs(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var logs bytes.Buffer
+	session, err := StartHost(ctx, HostConfig{
+		RelayURL:  relayURL(server.URL),
+		LogWriter: &logs,
+	})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	result, err := Exec(ctx, ExecConfig{
+		Invite:  session.Invite,
+		Command: "printf logged",
+		Stdout:  &stdout,
+	})
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0", result.ExitCode)
+	}
+	cancel()
+
+	select {
+	case <-session.Done:
+	case <-time.After(time.Second):
+		t.Fatal("host did not stop after cancel")
+	}
+
+	logText := logs.String()
+	for _, want := range []string{
+		"opentunnel",
+		"event=sessionOpen",
+		"event=waiting",
+		"event=clientConnected",
+		"event=commandStart",
+		"event=commandFinish",
+		"event=sessionClose",
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("logs missing %q in:\n%s", want, logText)
+		}
+	}
+	if strings.Contains(logText, session.Invite) {
+		t.Fatalf("logs include invite %q in:\n%s", session.Invite, logText)
+	}
+}
+
 func TestExecStreamsStderrThroughEncryptedTunnel(t *testing.T) {
 	server := httptest.NewServer(relay.NewServer().Handler())
 	defer server.Close()
