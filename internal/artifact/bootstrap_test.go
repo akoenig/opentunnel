@@ -25,6 +25,7 @@ func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 		"/cli/bin/opentunnel-dev-linux-amd64.sha256",
 		"umask 077",
 		"${TMPDIR:-/tmp}",
+		"mktemp -d \"${TMPDIR:-/tmp}/opentunnel-cli.XXXXXX\"",
 		"sha256sum",
 		"shasum -a 256",
 		"chmod 700",
@@ -162,6 +163,100 @@ printf 'POISON_CACHE_EXECUTED\n'
 	}
 	if strings.Contains(string(output), "POISON_CACHE_EXECUTED") {
 		t.Fatalf("bootstrap executed poisoned cache binary; output:\n%s", output)
+	}
+}
+
+func TestRenderBootstrapDoesNotExecuteCommandSubstitutionInArtifactCoordinates(t *testing.T) {
+	tests := []struct {
+		name        string
+		version     string
+		platformKey string
+	}{
+		{
+			name:        "version",
+			version:     "dev$(/usr/bin/touch MARKER)",
+			platformKey: "linux-amd64",
+		},
+		{
+			name:        "platform key",
+			version:     "dev",
+			platformKey: "linux$(/usr/bin/touch MARKER)-amd64",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runDir := t.TempDir()
+			marker := filepath.Join(runDir, "command-substitution-executed")
+			script, err := RenderBootstrap(BootstrapConfig{
+				RelayOrigin: "http://relay.example",
+				Version:     strings.ReplaceAll(tt.version, "MARKER", marker),
+				PlatformKey: strings.ReplaceAll(tt.platformKey, "MARKER", marker),
+				Checksum:    "expected-checksum",
+			})
+			if err != nil {
+				t.Fatalf("RenderBootstrap returned error: %v", err)
+			}
+			path := filepath.Join(t.TempDir(), "bootstrap.sh")
+			writeExecutable(t, path, script)
+
+			toolsDir := t.TempDir()
+			writeExecutable(t, filepath.Join(toolsDir, "mktemp"), `#!/bin/sh
+exec /usr/bin/mktemp "$@"
+`)
+
+			cmd := exec.Command("/bin/sh", path)
+			cmd.Dir = runDir
+			cmd.Env = []string{
+				"PATH=" + toolsDir,
+				"TMPDIR=" + filepath.Join(runDir, "tmp"),
+			}
+			_, _ = cmd.CombinedOutput()
+
+			if _, err := os.Stat(marker); err == nil {
+				t.Fatalf("bootstrap executed command substitution for %s", tt.name)
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("Stat returned error: %v", err)
+			}
+		})
+	}
+}
+
+func TestRenderBootstrapDoesNotUsePrecreatedPredictableCache(t *testing.T) {
+	script := renderBootstrapForTest(t)
+	runDir := t.TempDir()
+	tmpDir := filepath.Join(runDir, "tmp")
+	bin := filepath.Join(tmpDir, "opentunnel-cli", "linux-amd64", "dev", "expected-checksum", "opentunnel")
+	writeExecutable(t, bin, `#!/bin/sh
+printf 'PREDICTABLE_CACHE_EXECUTED\n'
+`)
+
+	toolsDir := t.TempDir()
+	writeExecutable(t, filepath.Join(toolsDir, "sha256sum"), `#!/bin/sh
+printf 'expected-checksum  %s\n' "$1"
+`)
+	writeExecutable(t, filepath.Join(toolsDir, "awk"), `#!/bin/sh
+if [ "$#" -gt 1 ]; then
+  read -r line < "$2"
+else
+  read -r line
+fi
+set -- $line
+printf '%s\n' "$1"
+`)
+	writeExecutable(t, filepath.Join(toolsDir, "mktemp"), `#!/bin/sh
+exec /usr/bin/mktemp "$@"
+`)
+
+	cmd := exec.Command("/bin/sh", script)
+	cmd.Dir = runDir
+	cmd.Env = []string{
+		"PATH=" + toolsDir,
+		"TMPDIR=" + tmpDir,
+	}
+	output, _ := cmd.CombinedOutput()
+	if strings.Contains(string(output), "PREDICTABLE_CACHE_EXECUTED") {
+		t.Fatalf("bootstrap executed precreated predictable cache binary; output:\n%s", output)
 	}
 }
 
