@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strings"
 
+	"opentunnel/internal/artifact"
 	"opentunnel/internal/relay"
 	"opentunnel/internal/tunnel"
 )
@@ -96,6 +97,9 @@ func parseCreateArgs(args []string) (createCommand, error) {
 		return createCommand{}, fmt.Errorf("create got unexpected argument %q", flags.Arg(0))
 	}
 	if cmd.relayURL == "" {
+		cmd.relayURL = os.Getenv("OPENTUNNEL_RELAY_ORIGIN")
+	}
+	if cmd.relayURL == "" {
 		return createCommand{}, errors.New("create requires --relay")
 	}
 	return cmd, nil
@@ -151,7 +155,17 @@ func validatePublicURL(raw string) error {
 }
 
 func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
-	server := &http.Server{Addr: cmd.listen, Handler: relay.NewServer().Handler()}
+	relayServer := relay.NewServer()
+	if cmd.publicURL != "" {
+		artifacts, err := buildRelayCLIArtifacts(cmd.publicURL, os.Executable, artifact.CurrentPlatformKey)
+		if err != nil {
+			fmt.Fprintf(stderr, "start relay: %v\n", err)
+			return 1
+		}
+		relayServer = relay.NewServer(relay.WithCLIArtifacts(artifacts))
+	}
+
+	server := &http.Server{Addr: cmd.listen, Handler: relayServer.Handler()}
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- server.ListenAndServe()
@@ -188,7 +202,7 @@ func (cmd createCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wr
 		fmt.Fprintf(stderr, "create: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "agent-ready\ninvite: %s\nexec: opentunnel exec --invite %s -- hostname\n", session.Invite, session.Invite)
+	writeCreateReady(stdout, session.Invite, cmd.relayURL)
 
 	select {
 	case <-signalCtx.Done():
@@ -200,6 +214,27 @@ func (cmd createCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wr
 		}
 		return 0
 	}
+}
+
+func buildRelayCLIArtifacts(publicURL string, executable func() (string, error), platformKey func() (string, error)) (relay.CLIArtifacts, error) {
+	binaryPath, err := executable()
+	if err != nil {
+		return relay.CLIArtifacts{}, fmt.Errorf("resolve executable: %w", err)
+	}
+	key, err := platformKey()
+	if err != nil {
+		return relay.CLIArtifacts{}, fmt.Errorf("resolve platform: %w", err)
+	}
+	return relay.CLIArtifacts{
+		RelayOrigin: publicURL,
+		Version:     "dev",
+		PlatformKey: key,
+		BinaryPath:  binaryPath,
+	}, nil
+}
+
+func writeCreateReady(stdout io.Writer, invite string, relayURL string) {
+	fmt.Fprintf(stdout, "agent-ready\nrun: curl -fsSL %s/cli | sh -s -- exec --invite '%s' -- <command>\n", strings.TrimRight(relayURL, "/"), invite)
 }
 
 func websocketRelayURL(raw string) (string, error) {
