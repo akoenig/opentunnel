@@ -45,6 +45,26 @@ checksum_url="${relay_origin}%s"
 cache_dir="${TMPDIR:-/tmp}/opentunnel-cli/${platform}/${version}/${expected_checksum}"
 bin="${cache_dir}/opentunnel"
 
+checksum_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    printf 'opentunnel: sha256sum or shasum is required\n' >&2
+    return 1
+  fi
+}
+
+if [ -x "$bin" ]; then
+  if ! actual_checksum=$(checksum_file "$bin"); then
+    exit 1
+  fi
+  if [ "$actual_checksum" != "$expected_checksum" ]; then
+    rm -f "$bin"
+  fi
+fi
+
 if [ ! -x "$bin" ]; then
   mkdir -p "$cache_dir"
   tmp_bin="${cache_dir}/opentunnel.$$"
@@ -68,12 +88,8 @@ if [ ! -x "$bin" ]; then
     exit 1
   fi
 
-  if command -v sha256sum >/dev/null 2>&1; then
-    actual_checksum=$(sha256sum "$tmp_bin" | awk '{print $1}')
-  elif command -v shasum >/dev/null 2>&1; then
-    actual_checksum=$(shasum -a 256 "$tmp_bin" | awk '{print $1}')
-  else
-    actual_checksum=$expected_checksum
+  if ! actual_checksum=$(checksum_file "$tmp_bin"); then
+    exit 1
   fi
 
   if [ "$actual_checksum" != "$expected_checksum" ]; then
