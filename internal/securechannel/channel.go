@@ -43,7 +43,7 @@ func GenerateHostKeypair(r io.Reader) (HostKeypair, error) {
 	}, nil
 }
 
-// EstablishChannelWithHostKey performs the v1 NKpsk0 handshake for a known host key.
+// EstablishChannelWithHostKey performs the v1 NKpsk0 handshake for a known host key and returns client, host channels.
 func EstablishChannelWithHostKey(cfg HandshakeConfig, hostKey HostKeypair, expectedHostPublic []byte) (*Channel, *Channel, error) {
 	if subtle.ConstantTimeCompare(hostKey.Public, expectedHostPublic) != 1 {
 		return nil, nil, ErrHostKeyMismatch
@@ -174,37 +174,28 @@ func establishNKpsk0WithConfigs(clientCfg HandshakeConfig, hostCfg HandshakeConf
 	if len(expectedHostPublic) == 0 {
 		return nil, nil, fmt.Errorf("%w: expected host public key is required", ErrHostKeyMismatch)
 	}
+	if subtle.ConstantTimeCompare(hostKey.Public, expectedHostPublic) != 1 {
+		return nil, nil, ErrHostKeyMismatch
+	}
 
-	clientPrologue, err := BuildPrologue(NewPrologueConfig(clientCfg))
+	clientNoiseCfg, err := nkpsk0Config(clientCfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	hostPrologue, err := BuildPrologue(NewPrologueConfig(hostCfg))
-	if err != nil {
-		return nil, nil, err
-	}
+	clientNoiseCfg.Initiator = true
+	clientNoiseCfg.PeerStatic = expectedHostPublic
 
-	noiseCfg := noise.Config{
-		CipherSuite:           noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s),
-		Pattern:               noise.HandshakeNK,
-		Initiator:             true,
-		Prologue:              clientPrologue,
-		PresharedKey:          clientCfg.ClientSecret[:],
-		PresharedKeyPlacement: 0,
-		PeerStatic:            expectedHostPublic,
-	}
-
-	clientHS, err := noise.NewHandshakeState(noiseCfg)
+	clientHS, err := noise.NewHandshakeState(clientNoiseCfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: create client handshake: %w", ErrHandshakeFailed, err)
 	}
 
-	hostNoiseCfg := noiseCfg
+	hostNoiseCfg, err := nkpsk0Config(hostCfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	hostNoiseCfg.Initiator = false
 	hostNoiseCfg.StaticKeypair = hostKey
-	hostNoiseCfg.Prologue = hostPrologue
-	hostNoiseCfg.PresharedKey = hostCfg.ClientSecret[:]
-	hostNoiseCfg.PeerStatic = nil
 
 	hostHS, err := noise.NewHandshakeState(hostNoiseCfg)
 	if err != nil {
@@ -228,10 +219,6 @@ func establishNKpsk0WithConfigs(clientCfg HandshakeConfig, hostCfg HandshakeConf
 	_, clientSend, clientRecv, err := clientHS.ReadMessage(nil, msg2)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: client read handshake: %w", ErrHandshakeFailed, err)
-	}
-
-	if subtle.ConstantTimeCompare(hostKey.Public, expectedHostPublic) != 1 {
-		return nil, nil, ErrHostKeyMismatch
 	}
 
 	return &Channel{send: clientSend, recv: clientRecv}, &Channel{send: hostSend, recv: hostRecv}, nil

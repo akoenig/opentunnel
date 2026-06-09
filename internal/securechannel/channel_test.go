@@ -3,6 +3,7 @@ package securechannel
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"testing"
 
 	"github.com/flynn/noise"
@@ -148,6 +149,9 @@ func TestHandshakeFailsWithWrongHostPublicKey(t *testing.T) {
 	_, _, err = establishNKpsk0(cfg, hostKey.private, otherHostKey.Public)
 	if err == nil {
 		t.Fatalf("expected wrong host public key to fail")
+	}
+	if !errors.Is(err, ErrHostKeyMismatch) {
+		t.Fatalf("expected ErrHostKeyMismatch, got %v", err)
 	}
 }
 
