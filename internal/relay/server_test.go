@@ -55,6 +55,49 @@ func TestCLIBootstrapUsesConfiguredArtifactCoordinates(t *testing.T) {
 	}
 }
 
+func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
+	binary := []byte("server options binary")
+	binaryPath := writeTestBinary(t, binary)
+	checksum := testSHA256(binary)
+	server := NewServerWithOptions(ServerOptions{
+		CLIArtifacts: &CLIArtifacts{
+			RelayOrigin: "https://relay.example.com",
+			Version:     "4.5.6",
+			PlatformKey: "linux-arm64",
+			BinaryPath:  binaryPath,
+		},
+	})
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	bootstrapResponse, bootstrapBody := getRelayPath(t, httpServer.URL, "/cli")
+	defer bootstrapResponse.Body.Close()
+	if bootstrapResponse.StatusCode != http.StatusOK {
+		t.Fatalf("bootstrap status mismatch: got %d want %d", bootstrapResponse.StatusCode, http.StatusOK)
+	}
+	if !strings.Contains(string(bootstrapBody), "version='4.5.6'") {
+		t.Fatalf("bootstrap missing configured version in:\n%s", bootstrapBody)
+	}
+
+	binaryResponse, binaryBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-4.5.6-linux-arm64")
+	defer binaryResponse.Body.Close()
+	if binaryResponse.StatusCode != http.StatusOK {
+		t.Fatalf("binary status mismatch: got %d want %d", binaryResponse.StatusCode, http.StatusOK)
+	}
+	if !bytes.Equal(binaryBody, binary) {
+		t.Fatalf("binary body mismatch: got %v want %v", binaryBody, binary)
+	}
+
+	checksumResponse, checksumBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-4.5.6-linux-arm64.sha256")
+	defer checksumResponse.Body.Close()
+	if checksumResponse.StatusCode != http.StatusOK {
+		t.Fatalf("checksum status mismatch: got %d want %d", checksumResponse.StatusCode, http.StatusOK)
+	}
+	if got := strings.TrimSpace(string(checksumBody)); got != checksum {
+		t.Fatalf("checksum body mismatch: got %q want %q", got, checksum)
+	}
+}
+
 func TestCLIBinaryAndChecksumAreServedFromConfiguredArtifact(t *testing.T) {
 	binary := []byte{0, 1, 2, 3, 255}
 	binaryPath := writeTestBinary(t, binary)

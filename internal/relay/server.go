@@ -27,6 +27,11 @@ type CLIArtifacts struct {
 	BinaryPath  string
 }
 
+// ServerOptions configures a relay server with plan-defined options.
+type ServerOptions struct {
+	CLIArtifacts *CLIArtifacts
+}
+
 // Option configures a relay server.
 type Option func(*Server)
 
@@ -46,6 +51,15 @@ type session struct {
 
 // NewServer creates an in-memory relay server.
 func NewServer(opts ...Option) *Server {
+	server := NewServerWithOptions(ServerOptions{})
+	for _, opt := range opts {
+		opt(server)
+	}
+	return server
+}
+
+// NewServerWithOptions creates an in-memory relay server from explicit options.
+func NewServerWithOptions(options ServerOptions) *Server {
 	server := &Server{
 		sessions: make(map[string]*session),
 		upgrader: websocket.Upgrader{
@@ -54,8 +68,9 @@ func NewServer(opts ...Option) *Server {
 			},
 		},
 	}
-	for _, opt := range opts {
-		opt(server)
+	if options.CLIArtifacts != nil {
+		artifacts := *options.CLIArtifacts
+		server.cliArtifacts = &artifacts
 	}
 	return server
 }

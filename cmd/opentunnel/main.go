@@ -22,8 +22,10 @@ type command interface {
 }
 
 type relayCommand struct {
-	listen    string
-	publicURL string
+	listen       string
+	publicURL    string
+	artifactPath string
+	version      string
 }
 
 type createCommand struct {
@@ -68,9 +70,15 @@ func parseArgs(args []string) (command, error) {
 func parseRelayArgs(args []string) (relayCommand, error) {
 	flags := flag.NewFlagSet("relay", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	cmd := relayCommand{}
+	artifactPath, err := os.Executable()
+	if err != nil {
+		return relayCommand{}, fmt.Errorf("resolve executable: %w", err)
+	}
+	cmd := relayCommand{artifactPath: artifactPath, version: "dev"}
 	flags.StringVar(&cmd.listen, "listen", ":8080", "HTTP listen address")
 	flags.StringVar(&cmd.publicURL, "public-url", "", "public relay URL")
+	flags.StringVar(&cmd.artifactPath, "artifact-path", artifactPath, "CLI artifact path")
+	flags.StringVar(&cmd.version, "version", "dev", "CLI artifact version")
 	if err := flags.Parse(args); err != nil {
 		return relayCommand{}, err
 	}
@@ -197,7 +205,7 @@ func isShellSafeURLHost(host string) bool {
 func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
 	relayServer := relay.NewServer()
 	if cmd.publicURL != "" {
-		artifacts, err := buildRelayCLIArtifacts(cmd.publicURL, os.Executable, artifact.CurrentPlatformKey)
+		artifacts, err := buildRelayCLIArtifacts(cmd.publicURL, cmd.artifactPath, cmd.version, artifact.CurrentPlatformKey)
 		if err != nil {
 			fmt.Fprintf(stderr, "start relay: %v\n", err)
 			return 1
@@ -256,25 +264,21 @@ func (cmd createCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wr
 	}
 }
 
-func buildRelayCLIArtifacts(publicURL string, executable func() (string, error), platformKey func() (string, error)) (relay.CLIArtifacts, error) {
-	binaryPath, err := executable()
-	if err != nil {
-		return relay.CLIArtifacts{}, fmt.Errorf("resolve executable: %w", err)
-	}
+func buildRelayCLIArtifacts(publicURL string, artifactPath string, version string, platformKey func() (string, error)) (relay.CLIArtifacts, error) {
 	key, err := platformKey()
 	if err != nil {
 		return relay.CLIArtifacts{}, fmt.Errorf("resolve platform: %w", err)
 	}
 	return relay.CLIArtifacts{
 		RelayOrigin: publicURL,
-		Version:     "dev",
+		Version:     version,
 		PlatformKey: key,
-		BinaryPath:  binaryPath,
+		BinaryPath:  artifactPath,
 	}, nil
 }
 
 func writeCreateReady(stdout io.Writer, invite string, relayURL string) {
-	fmt.Fprintf(stdout, "agent-ready\nrun: curl -fsSL %s/cli | sh -s -- exec --invite '%s' -- <command>\n", strings.TrimRight(relayURL, "/"), invite)
+	fmt.Fprintf(stdout, "agent-ready\nrun: curl -fsSL %s/cli | sh -s -- exec --invite '%s' -- '<COMMAND>'\n", strings.TrimRight(relayURL, "/"), invite)
 }
 
 func websocketRelayURL(raw string) (string, error) {

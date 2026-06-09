@@ -299,6 +299,81 @@ exec /usr/bin/mktemp "$@"
 	}
 }
 
+func TestRenderBootstrapReusesVerifiedPrivateCache(t *testing.T) {
+	script := renderBootstrapForTest(t)
+	runDir := t.TempDir()
+	toolsDir := t.TempDir()
+	cacheDir := filepath.Join(runDir, "cache")
+	tmpDir := filepath.Join(runDir, "tmp")
+	binaryDownloads := filepath.Join(runDir, "binary-downloads")
+	checksumCalls := filepath.Join(runDir, "checksum-calls")
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+
+	writeExecutable(t, filepath.Join(toolsDir, "curl"), `#!/bin/sh
+out=
+url=
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    shift
+    out=$1
+  else
+    url=$1
+  fi
+  shift
+done
+case "$url" in
+  *.sha256) printf 'expected-checksum  opentunnel\n' > "$out" ;;
+  *)
+    count=0
+    if [ -f "$BINARY_DOWNLOADS" ]; then
+      count=$(cat "$BINARY_DOWNLOADS")
+    fi
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$BINARY_DOWNLOADS"
+    printf '#!/bin/sh\nprintf '\''CACHED_BINARY_EXECUTED\\n'\''\n' > "$out"
+    ;;
+esac
+`)
+	writeExecutable(t, filepath.Join(toolsDir, "sha256sum"), `#!/bin/sh
+count=0
+if [ -f "$CHECKSUM_CALLS" ]; then
+  count=$(cat "$CHECKSUM_CALLS")
+fi
+count=$((count + 1))
+printf '%s\n' "$count" > "$CHECKSUM_CALLS"
+printf 'expected-checksum  %s\n' "$1"
+`)
+
+	for i := 0; i < 2; i++ {
+		cmd := exec.Command("/bin/sh", script)
+		cmd.Dir = runDir
+		cmd.Env = []string{
+			"PATH=" + toolsDir + ":/usr/bin:/bin",
+			"XDG_CACHE_HOME=" + cacheDir,
+			"HOME=",
+			"TMPDIR=" + tmpDir,
+			"BINARY_DOWNLOADS=" + binaryDownloads,
+			"CHECKSUM_CALLS=" + checksumCalls,
+		}
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("bootstrap run %d failed: %v\n%s", i+1, err, output)
+		}
+		if !strings.Contains(string(output), "CACHED_BINARY_EXECUTED") {
+			t.Fatalf("bootstrap run %d did not execute binary; output:\n%s", i+1, output)
+		}
+	}
+
+	if got := strings.TrimSpace(readTestFile(t, binaryDownloads)); got != "1" {
+		t.Fatalf("binary download count = %q, want 1", got)
+	}
+	if got := strings.TrimSpace(readTestFile(t, checksumCalls)); got != "2" {
+		t.Fatalf("checksum verification count = %q, want 2", got)
+	}
+}
+
 func renderBootstrapForTest(t *testing.T) string {
 	t.Helper()
 	script, err := RenderBootstrap(BootstrapConfig{
@@ -313,6 +388,15 @@ func renderBootstrapForTest(t *testing.T) string {
 	path := filepath.Join(t.TempDir(), "bootstrap.sh")
 	writeExecutable(t, path, script)
 	return path
+}
+
+func readTestFile(t *testing.T, path string) string {
+	t.Helper()
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	return string(contents)
 }
 
 func writeExecutable(t *testing.T, path string, content string) {

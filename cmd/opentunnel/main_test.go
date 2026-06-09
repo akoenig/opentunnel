@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseArgsRelay(t *testing.T) {
-	cmd, err := parseArgs([]string{"relay", "--listen", ":8080", "--public-url", "http://localhost:8080"})
+	cmd, err := parseArgs([]string{"relay", "--listen", ":8080", "--public-url", "http://localhost:8080", "--artifact-path", "/tmp/custom-opentunnel", "--version", "1.2.3"})
 	if err != nil {
 		t.Fatalf("parseArgs() error = %v", err)
 	}
@@ -21,6 +21,30 @@ func TestParseArgsRelay(t *testing.T) {
 	}
 	if relay.publicURL != "http://localhost:8080" {
 		t.Fatalf("relay.publicURL = %q, want %q", relay.publicURL, "http://localhost:8080")
+	}
+	if relay.artifactPath != "/tmp/custom-opentunnel" {
+		t.Fatalf("relay.artifactPath = %q, want %q", relay.artifactPath, "/tmp/custom-opentunnel")
+	}
+	if relay.version != "1.2.3" {
+		t.Fatalf("relay.version = %q, want %q", relay.version, "1.2.3")
+	}
+}
+
+func TestParseArgsRelayDefaultsArtifactPathAndVersion(t *testing.T) {
+	cmd, err := parseArgs([]string{"relay"})
+	if err != nil {
+		t.Fatalf("parseArgs() error = %v", err)
+	}
+
+	relay, ok := cmd.(relayCommand)
+	if !ok {
+		t.Fatalf("parseArgs() command = %T, want relayCommand", cmd)
+	}
+	if relay.artifactPath == "" {
+		t.Fatal("relay.artifactPath is empty, want os.Executable default")
+	}
+	if relay.version != "dev" {
+		t.Fatalf("relay.version = %q, want %q", relay.version, "dev")
 	}
 }
 
@@ -109,10 +133,8 @@ func TestParseArgsRelayRejectsUnsafePublicURLOrigin(t *testing.T) {
 	}
 }
 
-func TestBuildRelayCLIArtifactsUsesRunningExecutableAndPlatform(t *testing.T) {
-	artifacts, err := buildRelayCLIArtifacts("http://localhost:8080", func() (string, error) {
-		return "/tmp/opentunnel", nil
-	}, func() (string, error) {
+func TestBuildRelayCLIArtifactsUsesSuppliedArtifactCoordinates(t *testing.T) {
+	artifacts, err := buildRelayCLIArtifacts("http://localhost:8080", "/tmp/custom-opentunnel", "1.2.3", func() (string, error) {
 		return "testos-testarch", nil
 	})
 	if err != nil {
@@ -122,14 +144,14 @@ func TestBuildRelayCLIArtifactsUsesRunningExecutableAndPlatform(t *testing.T) {
 	if artifacts.RelayOrigin != "http://localhost:8080" {
 		t.Fatalf("RelayOrigin = %q, want %q", artifacts.RelayOrigin, "http://localhost:8080")
 	}
-	if artifacts.Version != "dev" {
-		t.Fatalf("Version = %q, want %q", artifacts.Version, "dev")
+	if artifacts.Version != "1.2.3" {
+		t.Fatalf("Version = %q, want %q", artifacts.Version, "1.2.3")
 	}
 	if artifacts.PlatformKey != "testos-testarch" {
 		t.Fatalf("PlatformKey = %q, want %q", artifacts.PlatformKey, "testos-testarch")
 	}
-	if artifacts.BinaryPath != "/tmp/opentunnel" {
-		t.Fatalf("BinaryPath = %q, want %q", artifacts.BinaryPath, "/tmp/opentunnel")
+	if artifacts.BinaryPath != "/tmp/custom-opentunnel" {
+		t.Fatalf("BinaryPath = %q, want %q", artifacts.BinaryPath, "/tmp/custom-opentunnel")
 	}
 }
 
@@ -140,7 +162,7 @@ func TestWriteCreateReadyPrintsBootstrapPromptWithoutStandaloneSecrets(t *testin
 	writeCreateReady(&stdout, invite, "http://localhost:8080")
 
 	output := stdout.String()
-	want := "curl -fsSL http://localhost:8080/cli | sh -s -- exec --invite '" + invite + "' -- <command>"
+	want := "curl -fsSL http://localhost:8080/cli | sh -s -- exec --invite '" + invite + "' -- '<COMMAND>'"
 	if !strings.Contains(output, want) {
 		t.Fatalf("create output missing bootstrap prompt %q in:\n%s", want, output)
 	}

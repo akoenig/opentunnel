@@ -46,12 +46,22 @@ platform=%s
 expected_checksum=%s
 binary_url="${relay_origin}"%s
 checksum_url="${relay_origin}"%s
-cache_root=$(mktemp -d "${TMPDIR:-/tmp}/opentunnel-cli.XXXXXX")
-cache_dir="${cache_root}/cache"
+cache_root=
+cache_base=
+if [ "${XDG_CACHE_HOME:-}" != "" ]; then
+  cache_base=$XDG_CACHE_HOME
+elif [ "${HOME:-}" != "" ]; then
+  cache_base="${HOME}/.cache"
+else
+  cache_root=$(mktemp -d "${TMPDIR:-/tmp}/opentunnel-cli.XXXXXX")
+  cache_base=$cache_root
+fi
+cache_dir="${cache_base}/opentunnel-cli/${platform}/${version}/${expected_checksum}"
 bin="${cache_dir}/opentunnel"
-tmp_bin="${cache_dir}/opentunnel.download"
-tmp_checksum="${cache_dir}/opentunnel.sha256"
-trap 'rm -rf "$cache_root"' EXIT HUP INT TERM
+download_root=$(mktemp -d "${TMPDIR:-/tmp}/opentunnel-cli-download.XXXXXX")
+tmp_bin="${download_root}/opentunnel.download"
+tmp_checksum="${download_root}/opentunnel.sha256"
+trap 'if [ "$cache_root" != "" ]; then rm -rf "$cache_root"; fi; rm -rf "$download_root"' EXIT HUP INT TERM
 
 checksum_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -64,7 +74,13 @@ checksum_file() {
   fi
 }
 
-mkdir -p "$cache_dir"
+if [ -f "$bin" ]; then
+  if actual_checksum=$(checksum_file "$bin") && [ "$actual_checksum" = "$expected_checksum" ]; then
+    export OPENTUNNEL_RELAY_ORIGIN="$relay_origin"
+    exec "$bin" "$@"
+  fi
+  rm -f "$bin"
+fi
 
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL "$binary_url" -o "$tmp_bin"
@@ -93,6 +109,7 @@ if [ "$actual_checksum" != "$expected_checksum" ]; then
 fi
 
 chmod 700 "$tmp_bin"
+mkdir -p "$cache_dir"
 mv "$tmp_bin" "$bin"
 rm -f "$tmp_checksum"
 
