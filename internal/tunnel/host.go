@@ -250,9 +250,6 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	if err := conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
 		return fmt.Errorf("write exit: %w", err)
 	}
-	if _, _, err := conn.ReadMessage(); err != nil && ctx.Err() != nil {
-		return ctx.Err()
-	}
 	return nil
 }
 

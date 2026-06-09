@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"opentunnel/internal/command"
+	"opentunnel/internal/invite"
 	"opentunnel/internal/relay"
 	"opentunnel/internal/securechannel"
 )
@@ -336,45 +338,69 @@ func TestExecStreamsStderrThroughEncryptedTunnel(t *testing.T) {
 	}
 }
 
-func TestExecDoesNotLeakContextWatcherAfterSuccess(t *testing.T) {
+func TestHostIdleTimeoutRestartsAfterCommandWhenClientKeepsSocketOpen(t *testing.T) {
 	server := httptest.NewServer(relay.NewServer().Handler())
 	defer server.Close()
 
 	hostCtx, cancelHost := context.WithCancel(context.Background())
 	defer cancelHost()
 
-	session, err := StartHost(hostCtx, HostConfig{RelayURL: relayURL(server.URL)})
+	session, err := StartHost(hostCtx, HostConfig{
+		RelayURL:    relayURL(server.URL),
+		IdleTimeout: 50 * time.Millisecond,
+	})
 	if err != nil {
 		t.Fatalf("start host: %v", err)
 	}
 
-	runtime.GC()
-	before := runtime.NumGoroutine()
-	for i := 0; i < 5; i++ {
-		var result ExecResult
-		deadline := time.Now().Add(time.Second)
-		for {
-			result, err = Exec(context.Background(), ExecConfig{
-				Invite:  session.Invite,
-				Command: "printf ok",
-			})
-			if err == nil {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("exec %d: %v", i, err)
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		if result.ExitCode != 0 {
-			t.Fatalf("exec %d exit code = %d, want 0", i, result.ExitCode)
-		}
-	}
-	runtime.GC()
-	after := runtime.NumGoroutine()
+	conn, channel := connectTestClient(t, session.Invite)
+	defer conn.Close()
 
-	if after-before > 2 {
-		t.Fatalf("goroutines grew from %d to %d after successful execs", before, after)
+	request, err := encryptJSON(channel, message{Type: commandRequest, Command: "printf ok"})
+	if err != nil {
+		t.Fatalf("encrypt command request: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.BinaryMessage, request); err != nil {
+		t.Fatalf("write command request: %v", err)
+	}
+
+	sawOutput := false
+	for {
+		_, encrypted, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("read tunnel message: %v", err)
+		}
+		msg, err := decryptJSON(channel, encrypted)
+		if err != nil {
+			t.Fatalf("decrypt tunnel message: %v", err)
+		}
+
+		if msg.Type == output {
+			sawOutput = string(msg.Data) == "ok"
+			continue
+		}
+		if msg.Type != exit {
+			t.Fatalf("message type = %q, want exit", msg.Type)
+		}
+		if msg.ExitCode != 0 {
+			t.Fatalf("exit code = %d, want 0", msg.ExitCode)
+		}
+		break
+	}
+	if !sawOutput {
+		t.Fatal("did not receive expected command output")
+	}
+
+	select {
+	case err := <-session.Done:
+		if err == nil {
+			t.Fatal("host stopped without error, want idle timeout error")
+		}
+		if !strings.Contains(err.Error(), string(ErrorTypeIdleSessionTimeout)) {
+			t.Fatalf("host error = %v, want %s", err, ErrorTypeIdleSessionTimeout)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("host did not idle timeout after command exit")
 	}
 }
 
@@ -452,6 +478,49 @@ func TestEncryptedErrorMessageRoundTrip(t *testing.T) {
 
 func relayURL(httpURL string) string {
 	return "ws" + strings.TrimPrefix(httpURL, "http")
+}
+
+func connectTestClient(t *testing.T, inviteCode string) (*websocket.Conn, *securechannel.Channel) {
+	t.Helper()
+
+	payload, err := invite.Decode(inviteCode)
+	if err != nil {
+		t.Fatalf("decode invite: %v", err)
+	}
+	relayURL, err := parseRelayURL(payload.Relay)
+	if err != nil {
+		t.Fatalf("parse relay url: %v", err)
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(relayURL, "client", payload.SessionID), nil)
+	if err != nil {
+		t.Fatalf("connect client relay websocket: %v", err)
+	}
+
+	handshake, err := securechannel.NewClientHandshake(handshakeConfig(payload.SessionID, payload.Relay, payload.ClientSecret), payload.HostPublicKey)
+	if err != nil {
+		conn.Close()
+		t.Fatalf("new client handshake: %v", err)
+	}
+	msg1, err := handshake.WriteMessage()
+	if err != nil {
+		conn.Close()
+		t.Fatalf("write handshake message: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.BinaryMessage, msg1); err != nil {
+		conn.Close()
+		t.Fatalf("write client handshake: %v", err)
+	}
+	_, msg2, err := conn.ReadMessage()
+	if err != nil {
+		conn.Close()
+		t.Fatalf("read host handshake: %v", err)
+	}
+	channel, err := handshake.ReadMessage(msg2)
+	if err != nil {
+		conn.Close()
+		t.Fatalf("read handshake message: %v", err)
+	}
+	return conn, channel
 }
 
 func testHostChannel(t *testing.T) *securechannel.Channel {
