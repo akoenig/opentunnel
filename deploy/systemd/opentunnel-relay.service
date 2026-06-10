@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenTunnel relay
+Documentation=https://example.invalid/opentunnel/docs/public-v1/self-hosting
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/opentunnel/relay.env
+ExecStart=/usr/local/bin/opentunnel relay --listen ${OPENTUNNEL_LISTEN} --public-url ${OPENTUNNEL_PUBLIC_URL} --artifact-path ${OPENTUNNEL_ARTIFACT_PATH} --version ${OPENTUNNEL_VERSION}
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
