@@ -1,0 +1,9 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "release": {
+      "description": "Prepare and publish an OpenTunnel release.",
+      "template": "If no argument was supplied, run scripts/release.sh. If the argument is exactly patch, run scripts/release.sh patch. If the argument is exactly minor, run scripts/release.sh minor. If the argument is exactly major, run scripts/release.sh major. For any other argument, tell the user the valid forms are: /release, /release patch, /release minor, or /release major, and do not run scripts/release.sh. Do not bypass script preflight checks."
+    }
+  }
+}

@@ -39,11 +39,38 @@ Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-rel
 
 TLS is normally terminated by a reverse proxy or load balancer in front of the relay.
 
+## Release Command
+
+Use the opencode slash command for normal releases:
+
+```text
+/release
+/release patch
+/release minor
+/release major
+```
+
+The command runs `scripts/release.sh`. It fetches `origin main --tags`, requires the current branch to be `main`, requires local `main` to match `origin/main`, requires no tracked or untracked worktree changes, requires `VERSION=dev`, and requires authenticated `gh` access. It infers or applies the requested SemVer bump, updates `VERSION`, runs the release verification commands, commits the release, creates the GitHub Release, and commits `VERSION=dev` back to `main` for subsequent development.
+
+After pulling `.opencode/opencode.json`, restart opencode before using `/release`. Running opencode sessions do not reload slash commands.
+
+You can also run the release script directly:
+
+```bash
+scripts/release.sh
+scripts/release.sh patch
+scripts/release.sh minor
+scripts/release.sh major
+```
+
+Use the manual release process below as a fallback when debugging or recovering from a script failure.
+
 ## Manual Release Process
 
 1. Choose a version string, such as `1.0.0`.
-2. Update `VERSION` to `1.0.0` and commit that change.
-3. Run the full verification command set:
+2. Confirm you are on `main`, local `main` matches `origin/main`, the worktree has no tracked or untracked changes, `VERSION` is `dev`, and `gh auth status` succeeds.
+3. Update `VERSION` to `1.0.0` without committing it yet.
+4. Run the full verification command set:
 
    ```bash
    go test ./... -count=1
@@ -54,15 +81,18 @@ TLS is normally terminated by a reverse proxy or load balancer in front of the r
    rm -f ./opentunnel
    ```
 
-4. Publish a GitHub Release tagged `1.0.0` from that commit.
-5. Wait for the release workflow to publish `ghcr.io/akoenig/opentunnel:1.0.0` and `ghcr.io/akoenig/opentunnel:latest`.
-6. Start the relay with `docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 relay --public-url https://relay.example.com`.
-7. Verify `/cli`.
-8. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-amd64` and `/cli/bin/opentunnel-1.0.0-linux-amd64.sha256`.
-9. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-arm64` and `/cli/bin/opentunnel-1.0.0-linux-arm64.sha256`.
-10. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-amd64` and `/cli/bin/opentunnel-1.0.0-darwin-amd64.sha256`.
-11. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-arm64` and `/cli/bin/opentunnel-1.0.0-darwin-arm64.sha256`.
-12. Verify the public flow: `curl -fsSL https://relay.example.com/cli | sh -s -- create`, then run the generated `exec` command.
+5. Commit the release: `git add VERSION && git commit -m "chore: release 1.0.0"`.
+6. Create and push tag `1.0.0` at that commit.
+7. Publish a GitHub Release tagged `1.0.0` from that commit.
+8. Reset `VERSION` to `dev`, commit it, and push `main`.
+9. Wait for the release workflow to publish `ghcr.io/akoenig/opentunnel:1.0.0` and `ghcr.io/akoenig/opentunnel:latest`.
+10. Start the relay with `docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 relay --public-url https://relay.example.com`.
+11. Verify `/cli`.
+12. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-amd64` and `/cli/bin/opentunnel-1.0.0-linux-amd64.sha256`.
+13. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-arm64` and `/cli/bin/opentunnel-1.0.0-linux-arm64.sha256`.
+14. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-amd64` and `/cli/bin/opentunnel-1.0.0-darwin-amd64.sha256`.
+15. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-arm64` and `/cli/bin/opentunnel-1.0.0-darwin-arm64.sha256`.
+16. Verify the public flow: `curl -fsSL https://relay.example.com/cli | sh -s -- create`, then run the generated `exec` command.
 
 Artifact filenames are derived from `VERSION`. Development builds with `VERSION=dev` produce `/cli/bin/opentunnel-dev-*` paths instead of `opentunnel-1.0.0-*` paths. Prefer immutable GHCR version tags for production; `latest` is mutable.
 
