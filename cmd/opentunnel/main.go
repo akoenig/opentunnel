@@ -282,7 +282,33 @@ func buildRelayServerOptions(publicURL string, artifactPath string, version stri
 }
 
 func writeCreateReady(stdout io.Writer, invite string, relayURL string) {
-	fmt.Fprintf(stdout, "agent-ready\nrun: curl -fsSL %s/cli | sh -s -- exec --invite '%s' -- '<COMMAND>'\n", strings.TrimRight(relayURL, "/"), invite)
+	origin := strings.TrimRight(relayURL, "/")
+	fmt.Fprintf(stdout, `I opened an OpenTunnel session for you.
+
+Run commands on my host with:
+
+curl -fsSL %[1]s/cli | sh -s -- exec \
+  --invite '%[2]s' \
+  -- '<COMMAND>'
+
+Start with:
+
+curl -fsSL %[1]s/cli | sh -s -- exec \
+  --invite '%[2]s' \
+  -- 'hostname && uname -a && pwd'
+
+Commands execute without per-command approval while this foreground session is running.
+Treat the invite as bearer-secret material. Do not copy it into shared logs, tickets, summaries, or long-lived notes. The host owner can revoke access with Ctrl+C.
+
+Notes:
+- Use non-interactive commands.
+- No PTY or interactive stdin is available in the first major version.
+- Avoid sudo unless it is passwordless and non-interactive.
+- Avoid long-running commands unless necessary.
+- Only one client can connect to this tunnel at a time.
+- Only one command runs at a time.
+- The temporary OpenTunnel CLI is cached in the system temp directory during the session.
+`, origin, invite)
 }
 
 func websocketRelayURL(raw string) (string, error) {

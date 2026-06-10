@@ -155,22 +155,41 @@ func TestBuildRelayServerOptionsUsesSuppliedArtifactCoordinates(t *testing.T) {
 	}
 }
 
-func TestWriteCreateReadyPrintsBootstrapPromptWithoutStandaloneSecrets(t *testing.T) {
+func TestWriteCreateReadyPrintsPublicAgentPrompt(t *testing.T) {
 	var stdout bytes.Buffer
 	invite := "ot1_example_secret"
 
 	writeCreateReady(&stdout, invite, "http://localhost:8080")
 
 	output := stdout.String()
-	want := "curl -fsSL http://localhost:8080/cli | sh -s -- exec --invite '" + invite + "' -- '<COMMAND>'"
-	if !strings.Contains(output, want) {
-		t.Fatalf("create output missing bootstrap prompt %q in:\n%s", want, output)
+	wants := []string{
+		"I opened an OpenTunnel session for you.",
+		"Run commands on my host with:",
+		"curl -fsSL http://localhost:8080/cli | sh -s -- exec \\",
+		"  --invite '" + invite + "' \\",
+		"  -- '<COMMAND>'",
+		"Start with:",
+		"  -- 'hostname && uname -a && pwd'",
+		"Commands execute without per-command approval while this foreground session is running.",
+		"Treat the invite as bearer-secret material.",
+		"The host owner can revoke access with Ctrl+C.",
+		"Use non-interactive commands.",
+		"No PTY or interactive stdin is available in the first major version.",
+		"Avoid sudo unless it is passwordless and non-interactive.",
+		"Only one client can connect to this tunnel at a time.",
+		"Only one command runs at a time.",
+		"The temporary OpenTunnel CLI is cached in the system temp directory during the session.",
 	}
-	if strings.Count(output, invite) != 1 {
-		t.Fatalf("create output prints invite %d times, want once in:\n%s", strings.Count(output, invite), output)
+	for _, want := range wants {
+		if !strings.Contains(output, want) {
+			t.Fatalf("create output missing %q in:\n%s", want, output)
+		}
 	}
-	if strings.Contains(output, "invite:") || strings.Contains(output, "secret:") {
-		t.Fatalf("create output contains standalone secret label in:\n%s", output)
+	if strings.Count(output, invite) != 2 {
+		t.Fatalf("create output prints invite %d times, want twice in command examples:\n%s", strings.Count(output, invite), output)
+	}
+	if strings.Contains(output, " --relay ") || strings.Contains(output, "\nrelay:") || strings.Contains(output, "\nsecret:") {
+		t.Fatalf("create output contains user-facing relay flag or standalone secret label in:\n%s", output)
 	}
 }
 
