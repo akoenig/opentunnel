@@ -6,8 +6,8 @@ This document maps `plan.md` public v1 requirements to the current implementatio
 
 | Requirement | Status |
 | --- | --- |
-| Host starts with `curl -fsSL <relay>/cli \| sh -s -- create` | Implemented and manually verified. |
-| Client executes with `curl -fsSL <relay>/cli \| sh -s -- exec --invite '<invite>' -- '<command>'` | Implemented and manually verified. |
+| Host starts with `curl -fsSL <relay>/cli \| sh -s -- create` | Implemented; verified in M5 final verification. |
+| Client executes with `curl -fsSL <relay>/cli \| sh -s -- exec --invite '<invite>' -- '<command>'` | Implemented; verified in M5 final verification. |
 | No user-facing relay flag in public UX | Implemented. Relay origin comes from `/cli` bootstrap context or invite. |
 | Temporary CLI cached during session | Implemented. Cache lives under a private temp cache path and cache hits are checksum-verified. |
 
