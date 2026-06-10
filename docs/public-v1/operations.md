@@ -42,11 +42,21 @@ TLS is normally terminated by a reverse proxy or load balancer in front of the r
 ## Manual Release Process
 
 1. Choose a version string, such as `1.0.0`.
-2. Update `VERSION` to `1.0.0` before building.
-3. Run the verification commands above.
-4. Build the Docker image with `docker build -f deploy/docker/Dockerfile -t opentunnel-relay:1.0.0 .`.
-5. Deploy the image to the relay host.
-6. Start the relay with `docker run -p 8080:8080 opentunnel-relay:1.0.0 relay --public-url https://relay.example.com`.
+2. Update `VERSION` to `1.0.0` and commit that change.
+3. Run the full verification command set:
+
+   ```bash
+   go test ./... -count=1
+   go vet ./...
+   go mod tidy -diff
+   go test -race ./... -count=1
+   go build ./cmd/opentunnel
+   rm -f ./opentunnel
+   ```
+
+4. Publish a GitHub Release tagged `1.0.0` from that commit.
+5. Wait for the release workflow to publish `ghcr.io/akoenig/opentunnel:1.0.0` and `ghcr.io/akoenig/opentunnel:latest`.
+6. Start the relay with `docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 relay --public-url https://relay.example.com`.
 7. Verify `/cli`.
 8. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-amd64` and `/cli/bin/opentunnel-1.0.0-linux-amd64.sha256`.
 9. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-arm64` and `/cli/bin/opentunnel-1.0.0-linux-arm64.sha256`.
@@ -54,7 +64,7 @@ TLS is normally terminated by a reverse proxy or load balancer in front of the r
 11. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-arm64` and `/cli/bin/opentunnel-1.0.0-darwin-arm64.sha256`.
 12. Verify the public flow: `curl -fsSL https://relay.example.com/cli | sh -s -- create`, then run the generated `exec` command.
 
-Artifact filenames are derived from `VERSION`. Development builds with `VERSION=dev` produce `/cli/bin/opentunnel-dev-*` paths instead of `opentunnel-1.0.0-*` paths.
+Artifact filenames are derived from `VERSION`. Development builds with `VERSION=dev` produce `/cli/bin/opentunnel-dev-*` paths instead of `opentunnel-1.0.0-*` paths. Prefer immutable GHCR version tags for production; `latest` is mutable.
 
 ## Checksum Boundary
 

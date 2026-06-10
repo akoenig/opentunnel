@@ -16,6 +16,17 @@ For local testing:
 docker run --rm -p 8080:8080 opentunnel-relay:dev relay --public-url http://localhost:8080
 ```
 
+## Released Image
+
+GitHub Releases publish a self-contained image to GHCR:
+
+```bash
+docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 \
+  relay --public-url https://relay.example.com
+```
+
+The release workflow also publishes `ghcr.io/akoenig/opentunnel:latest`. Prefer immutable version tags for production because `latest` moves when a new release is published.
+
 For public deployment, set `--public-url` to the HTTPS origin users will fetch:
 
 ```bash

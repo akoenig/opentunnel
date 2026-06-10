@@ -24,6 +24,15 @@ Run a local relay:
 docker run --rm -p 8080:8080 opentunnel-relay:dev relay --public-url http://127.0.0.1:8080
 ```
 
+For released images:
+
+```bash
+docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 \
+  relay --public-url https://relay.example.com
+```
+
+Use immutable version tags for production. The `latest` tag is also published and moves with each release.
+
 Start a host session through the public `/cli` path:
 
 ```bash
