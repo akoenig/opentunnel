@@ -34,6 +34,8 @@ docker run --rm -p 8080:8080 opentunnel-relay:dev \
   --version dev
 ```
 
+Override relay defaults by passing command arguments; the Docker relay does not read `OPENTUNNEL_*` environment variables.
+
 ## systemd Deployment
 
 Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-relay.env.example` as copyable examples. Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_PATH` points to the compatible binary served by `/cli`.

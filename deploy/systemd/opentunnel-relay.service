@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/opentunnel/relay.env
+User=opentunnel
+Group=opentunnel
 ExecStart=/usr/local/bin/opentunnel relay --listen ${OPENTUNNEL_LISTEN} --public-url ${OPENTUNNEL_PUBLIC_URL} --artifact-path ${OPENTUNNEL_ARTIFACT_PATH} --version ${OPENTUNNEL_VERSION}
 Restart=on-failure
 RestartSec=5s

@@ -25,6 +25,8 @@ docker run --rm -p 8080:8080 opentunnel-relay:dev \
 
 For public deployment, set `--public-url` to the HTTPS origin users will fetch. Terminate TLS with a reverse proxy or load balancer in front of the container.
 
+Override relay defaults by passing command arguments, as shown above. The relay does not read `OPENTUNNEL_*` environment variables in Docker.
+
 ## Smoke Test
 
 With the container running:

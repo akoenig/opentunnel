@@ -15,10 +15,5 @@ COPY --from=builder /out/opentunnel /opentunnel
 USER nonroot:nonroot
 EXPOSE 8080
 
-ENV OPENTUNNEL_LISTEN=:8080
-ENV OPENTUNNEL_PUBLIC_URL=http://localhost:8080
-ENV OPENTUNNEL_ARTIFACT_PATH=/opentunnel
-ENV OPENTUNNEL_VERSION=dev
-
 ENTRYPOINT ["/opentunnel"]
 CMD ["relay", "--listen", ":8080", "--public-url", "http://localhost:8080", "--artifact-path", "/opentunnel", "--version", "dev"]
