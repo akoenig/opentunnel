@@ -63,3 +63,7 @@ The invite contains the information the client needs to connect. The user-facing
 - `--public-url` is the relay origin embedded into the bootstrapper.
 
 The relay serves only the configured artifact path and its checksum. It does not expose arbitrary files.
+
+## Operations
+
+For Docker, systemd, CI, and manual release guidance, see `docs/public-v1/operations.md`.
