@@ -62,6 +62,8 @@ rm -f ./opentunnel
 CI also builds downloadable binaries for:
 
 - `linux-amd64`
+- `linux-arm64`
+- `linux-armv7`
 - `darwin-arm64` Apple Silicon
 
 ## Documentation
