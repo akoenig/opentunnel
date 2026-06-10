@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "golang-patterns": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "skillPath": "skills/golang-patterns/SKILL.md",
+      "computedHash": "67c25e95cec3f3166c2efefd5f4502863a1246c6f742b8cbcd2e2864d2a8182a"
+    },
+    "golang-pro": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/golang-pro/SKILL.md",
+      "computedHash": "12b4cac8f65228f82cbc26f0da9232aba87ffa45ccd01afa3998fb8ec61dc288"
+    }
+  }
+}
