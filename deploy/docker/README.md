@@ -1,0 +1,36 @@
+# OpenTunnel Docker Relay
+
+This Docker image runs the OpenTunnel relay and serves the same `opentunnel` binary as the temporary `/cli` artifact. It is an operator deployment path for the relay. It is not a package-manager or install-to-system distribution path for end users.
+
+## Build
+
+From the repository root:
+
+```bash
+docker build -f deploy/docker/Dockerfile -t opentunnel-relay:dev .
+```
+
+## Run
+
+For local testing:
+
+```bash
+docker run --rm -p 8080:8080 opentunnel-relay:dev \
+  relay \
+  --listen :8080 \
+  --public-url http://localhost:8080 \
+  --artifact-path /opentunnel \
+  --version dev
+```
+
+For public deployment, set `--public-url` to the HTTPS origin users will fetch. Terminate TLS with a reverse proxy or load balancer in front of the container.
+
+## Smoke Test
+
+With the container running:
+
+```bash
+curl -fsSL http://localhost:8080/cli >/tmp/opentunnel-cli.sh
+```
+
+The relay stores no sessions or command data persistently. Active connection state is memory-only inside the relay process.
