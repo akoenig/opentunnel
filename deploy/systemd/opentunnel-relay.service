@@ -1,6 +1,5 @@
 [Unit]
 Description=OpenTunnel relay
-Documentation=https://example.invalid/opentunnel/docs/public-v1/self-hosting
 After=network-online.target
 Wants=network-online.target
 
