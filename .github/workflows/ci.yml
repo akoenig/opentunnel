@@ -44,17 +44,16 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            name: opentunnel-linux-amd64
+            platform: linux-amd64
           - goos: linux
             goarch: arm64
-            name: opentunnel-linux-arm64
-          - goos: linux
-            goarch: arm
-            goarm: '7'
-            name: opentunnel-linux-armv7
+            platform: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            platform: darwin-amd64
           - goos: darwin
             goarch: arm64
-            name: opentunnel-darwin-arm64
+            platform: darwin-arm64
     steps:
       - name: Configure Git defaults
         run: git config --global init.defaultBranch main
@@ -75,14 +74,11 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           mkdir -p dist
-          if [ -n "${{ matrix.goarm }}" ]; then
-            GOARM=${{ matrix.goarm }} go build -o dist/${{ matrix.name }} ./cmd/opentunnel
-          else
-            go build -o dist/${{ matrix.name }} ./cmd/opentunnel
-          fi
+          version="$(cat VERSION)"
+          go build -ldflags "-X opentunnel/internal/buildinfo.Version=${version}" -o "dist/opentunnel-${version}-${{ matrix.platform }}" ./cmd/opentunnel
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: ${{ matrix.name }}
-          path: dist/${{ matrix.name }}
+          name: opentunnel-${{ matrix.platform }}
+          path: dist/opentunnel-*-${{ matrix.platform }}

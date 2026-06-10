@@ -6,12 +6,17 @@ import (
 	"strings"
 )
 
+// BootstrapArtifact contains the checksum for one supported CLI artifact.
+type BootstrapArtifact struct {
+	PlatformKey string
+	Checksum    string
+}
+
 // BootstrapConfig contains the immutable artifact coordinates for a CLI bootstrap script.
 type BootstrapConfig struct {
 	RelayOrigin string
 	Version     string
-	PlatformKey string
-	Checksum    string
+	Artifacts   []BootstrapArtifact
 }
 
 // RenderBootstrap renders a POSIX sh script that installs and executes the CLI binary.
@@ -25,16 +30,11 @@ func RenderBootstrap(cfg BootstrapConfig) (string, error) {
 	if cfg.Version == "" {
 		return "", fmt.Errorf("version is required")
 	}
-	if cfg.PlatformKey == "" {
-		return "", fmt.Errorf("platform key is required")
-	}
-	if cfg.Checksum == "" {
-		return "", fmt.Errorf("checksum is required")
-	}
 
-	artifactName := "opentunnel-" + cfg.Version + "-" + cfg.PlatformKey
-	binaryPath := "/cli/bin/" + artifactName
-	checksumPath := binaryPath + ".sha256"
+	checksums, err := validateBootstrapArtifacts(cfg.Artifacts)
+	if err != nil {
+		return "", err
+	}
 
 	script := fmt.Sprintf(`#!/bin/sh
 set -eu
@@ -42,10 +42,28 @@ umask 077
 
 relay_origin=%s
 version=%s
-platform=%s
-expected_checksum=%s
-binary_url="${relay_origin}"%s
-checksum_url="${relay_origin}"%s
+os_name=$(uname -s)
+arch_name=$(uname -m)
+case "$os_name/$arch_name" in
+  Linux/x86_64|Linux/amd64) platform=linux-amd64 ;;
+  Linux/aarch64|Linux/arm64) platform=linux-arm64 ;;
+  Darwin/x86_64|Darwin/amd64) platform=darwin-amd64 ;;
+  Darwin/arm64|Darwin/aarch64) platform=darwin-arm64 ;;
+  *)
+    printf 'opentunnel: unsupported platform %%s/%%s\n' "$os_name" "$arch_name" >&2
+    exit 1
+    ;;
+esac
+case "$platform" in
+%s  *)
+    printf 'opentunnel: no checksum for platform %%s\n' "$platform" >&2
+    exit 1
+    ;;
+esac
+binary_path="/cli/bin/opentunnel-${version}-${platform}"
+checksum_path="${binary_path}.sha256"
+binary_url="${relay_origin}${binary_path}"
+checksum_url="${relay_origin}${checksum_path}"
 if ! uid=$(id -u 2>/dev/null); then
   printf 'opentunnel: cannot determine current user id\n' >&2
   exit 1
@@ -116,9 +134,64 @@ rm -f "$tmp_checksum"
 
 export OPENTUNNEL_RELAY_ORIGIN="$relay_origin"
 exec "$bin" "$@"
-`, shellQuote(cfg.RelayOrigin), shellQuote(cfg.Version), shellQuote(cfg.PlatformKey), shellQuote(cfg.Checksum), shellQuote(binaryPath), shellQuote(checksumPath))
+`, shellQuote(cfg.RelayOrigin), shellQuote(cfg.Version), renderChecksumCases(checksums))
 
 	return script, nil
+}
+
+func validateBootstrapArtifacts(artifacts []BootstrapArtifact) (map[string]string, error) {
+	if len(artifacts) == 0 {
+		return nil, fmt.Errorf("artifacts are required")
+	}
+
+	checksums := make(map[string]string, len(artifacts))
+	for _, artifact := range artifacts {
+		if !IsSupportedPlatform(artifact.PlatformKey) {
+			return nil, fmt.Errorf("unsupported platform %q", artifact.PlatformKey)
+		}
+		if !isSHA256Hex(artifact.Checksum) {
+			return nil, fmt.Errorf("checksum must be 64 hex characters for platform %q", artifact.PlatformKey)
+		}
+		if _, ok := checksums[artifact.PlatformKey]; ok {
+			return nil, fmt.Errorf("duplicate checksum for platform %q", artifact.PlatformKey)
+		}
+		checksums[artifact.PlatformKey] = artifact.Checksum
+	}
+
+	for _, platform := range SupportedPlatforms() {
+		if _, ok := checksums[platform]; !ok {
+			return nil, fmt.Errorf("checksum is required for platform %q", platform)
+		}
+	}
+
+	return checksums, nil
+}
+
+func isSHA256Hex(checksum string) bool {
+	if len(checksum) != 64 {
+		return false
+	}
+
+	for _, char := range checksum {
+		if (char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F') {
+			continue
+		}
+		return false
+	}
+
+	return true
+}
+
+func renderChecksumCases(checksums map[string]string) string {
+	var builder strings.Builder
+	for _, platform := range SupportedPlatforms() {
+		builder.WriteString("  ")
+		builder.WriteString(platform)
+		builder.WriteString(") expected_checksum=")
+		builder.WriteString(shellQuote(checksums[platform]))
+		builder.WriteString(" ;;\n")
+	}
+	return builder.String()
 }
 
 func validateRelayOrigin(relayOrigin string) error {

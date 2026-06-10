@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"strings"
 
-	"opentunnel/internal/artifact"
+	"opentunnel/internal/buildinfo"
 	"opentunnel/internal/relay"
 	"opentunnel/internal/tunnel"
 )
@@ -22,10 +22,10 @@ type command interface {
 }
 
 type relayCommand struct {
-	listen       string
-	publicURL    string
-	artifactPath string
-	version      string
+	listen      string
+	publicURL   string
+	artifactDir string
+	version     string
 }
 
 type createCommand struct {
@@ -70,25 +70,22 @@ func parseArgs(args []string) (command, error) {
 func parseRelayArgs(args []string) (relayCommand, error) {
 	flags := flag.NewFlagSet("relay", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	artifactPath, err := os.Executable()
-	if err != nil {
-		return relayCommand{}, fmt.Errorf("resolve executable: %w", err)
-	}
-	cmd := relayCommand{artifactPath: artifactPath, version: "dev"}
+	cmd := relayCommand{listen: ":8080", artifactDir: "/opentunnel-artifacts", version: buildinfo.Version}
 	flags.StringVar(&cmd.listen, "listen", ":8080", "HTTP listen address")
 	flags.StringVar(&cmd.publicURL, "public-url", "", "public relay URL")
-	flags.StringVar(&cmd.artifactPath, "artifact-path", artifactPath, "CLI artifact path")
-	flags.StringVar(&cmd.version, "version", "dev", "CLI artifact version")
+	flags.StringVar(&cmd.artifactDir, "artifact-dir", "/opentunnel-artifacts", "CLI artifact directory")
+	flags.StringVar(&cmd.version, "version", buildinfo.Version, "CLI artifact version")
 	if err := flags.Parse(args); err != nil {
 		return relayCommand{}, err
 	}
 	if flags.NArg() != 0 {
 		return relayCommand{}, fmt.Errorf("relay got unexpected argument %q", flags.Arg(0))
 	}
-	if cmd.publicURL != "" {
-		if err := validatePublicURL(cmd.publicURL); err != nil {
-			return relayCommand{}, err
-		}
+	if cmd.publicURL == "" {
+		return relayCommand{}, errors.New("relay requires public url")
+	}
+	if err := validatePublicURL(cmd.publicURL); err != nil {
+		return relayCommand{}, err
 	}
 	return cmd, nil
 }
@@ -203,18 +200,14 @@ func isShellSafeURLHost(host string) bool {
 }
 
 func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Writer) int {
-	relayServer := relay.NewServer()
-	if cmd.publicURL != "" {
-		options, err := buildRelayServerOptions(cmd.publicURL, cmd.artifactPath, cmd.version, artifact.CurrentPlatformKey)
-		if err != nil {
-			fmt.Fprintf(stderr, "start relay: %v\n", err)
-			return 1
-		}
-		relayServer, err = relay.NewServerWithOptions(options)
-		if err != nil {
-			fmt.Fprintf(stderr, "start relay: %v\n", err)
-			return 1
-		}
+	relayServer, err := relay.NewServerWithOptions(relay.ServerOptions{
+		PublicURL:   cmd.publicURL,
+		ArtifactDir: cmd.artifactDir,
+		Version:     cmd.version,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "start relay: %v\n", err)
+		return 1
 	}
 
 	server := &http.Server{Addr: cmd.listen, Handler: relayServer.Handler()}
@@ -266,19 +259,6 @@ func (cmd createCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wr
 		}
 		return 0
 	}
-}
-
-func buildRelayServerOptions(publicURL string, artifactPath string, version string, platformKey func() (string, error)) (relay.ServerOptions, error) {
-	key, err := platformKey()
-	if err != nil {
-		return relay.ServerOptions{}, fmt.Errorf("resolve platform: %w", err)
-	}
-	return relay.ServerOptions{
-		PublicURL:    publicURL,
-		Version:      version,
-		ArtifactPath: artifactPath,
-		PlatformKey:  key,
-	}, nil
 }
 
 func writeCreateReady(stdout io.Writer, invite string, relayURL string) {

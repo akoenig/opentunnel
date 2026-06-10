@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseArgsRelay(t *testing.T) {
-	cmd, err := parseArgs([]string{"relay", "--listen", ":8080", "--public-url", "http://localhost:8080", "--artifact-path", "/tmp/custom-opentunnel", "--version", "1.2.3"})
+	cmd, err := parseArgs([]string{"relay", "--listen", ":8081", "--public-url", "http://localhost:8080", "--artifact-dir", "/tmp/opentunnel-artifacts", "--version", "1.2.3"})
 	if err != nil {
 		t.Fatalf("parseArgs() error = %v", err)
 	}
@@ -16,22 +16,32 @@ func TestParseArgsRelay(t *testing.T) {
 	if !ok {
 		t.Fatalf("parseArgs() command = %T, want relayCommand", cmd)
 	}
-	if relay.listen != ":8080" {
-		t.Fatalf("relay.listen = %q, want %q", relay.listen, ":8080")
+	if relay.listen != ":8081" {
+		t.Fatalf("relay.listen = %q, want %q", relay.listen, ":8081")
 	}
 	if relay.publicURL != "http://localhost:8080" {
 		t.Fatalf("relay.publicURL = %q, want %q", relay.publicURL, "http://localhost:8080")
 	}
-	if relay.artifactPath != "/tmp/custom-opentunnel" {
-		t.Fatalf("relay.artifactPath = %q, want %q", relay.artifactPath, "/tmp/custom-opentunnel")
+	if relay.artifactDir != "/tmp/opentunnel-artifacts" {
+		t.Fatalf("relay.artifactDir = %q, want %q", relay.artifactDir, "/tmp/opentunnel-artifacts")
 	}
 	if relay.version != "1.2.3" {
 		t.Fatalf("relay.version = %q, want %q", relay.version, "1.2.3")
 	}
 }
 
-func TestParseArgsRelayDefaultsArtifactPathAndVersion(t *testing.T) {
-	cmd, err := parseArgs([]string{"relay"})
+func TestParseArgsRelayRequiresPublicURL(t *testing.T) {
+	_, err := parseArgs([]string{"relay"})
+	if err == nil {
+		t.Fatal("parseArgs() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "public url") {
+		t.Fatalf("parseArgs() error = %q, want public url", err.Error())
+	}
+}
+
+func TestParseArgsRelayDefaultsArtifactDirAndVersion(t *testing.T) {
+	cmd, err := parseArgs([]string{"relay", "--public-url", "https://relay.example.com"})
 	if err != nil {
 		t.Fatalf("parseArgs() error = %v", err)
 	}
@@ -40,11 +50,18 @@ func TestParseArgsRelayDefaultsArtifactPathAndVersion(t *testing.T) {
 	if !ok {
 		t.Fatalf("parseArgs() command = %T, want relayCommand", cmd)
 	}
-	if relay.artifactPath == "" {
-		t.Fatal("relay.artifactPath is empty, want os.Executable default")
+	if relay.artifactDir != "/opentunnel-artifacts" {
+		t.Fatalf("relay.artifactDir = %q, want %q", relay.artifactDir, "/opentunnel-artifacts")
 	}
 	if relay.version != "dev" {
 		t.Fatalf("relay.version = %q, want %q", relay.version, "dev")
+	}
+}
+
+func TestParseArgsRelayRejectsArtifactPath(t *testing.T) {
+	_, err := parseArgs([]string{"relay", "--public-url", "https://relay.example.com", "--artifact-path", "/tmp/opentunnel"})
+	if err == nil {
+		t.Fatal("parseArgs() error = nil, want error")
 	}
 }
 
@@ -130,28 +147,6 @@ func TestParseArgsRelayRejectsUnsafePublicURLOrigin(t *testing.T) {
 				t.Fatal("parseArgs() error = nil, want error")
 			}
 		})
-	}
-}
-
-func TestBuildRelayServerOptionsUsesSuppliedArtifactCoordinates(t *testing.T) {
-	options, err := buildRelayServerOptions("http://localhost:8080", "/tmp/custom-opentunnel", "1.2.3", func() (string, error) {
-		return "testos-testarch", nil
-	})
-	if err != nil {
-		t.Fatalf("buildRelayServerOptions() error = %v", err)
-	}
-
-	if options.PublicURL != "http://localhost:8080" {
-		t.Fatalf("PublicURL = %q, want %q", options.PublicURL, "http://localhost:8080")
-	}
-	if options.Version != "1.2.3" {
-		t.Fatalf("Version = %q, want %q", options.Version, "1.2.3")
-	}
-	if options.PlatformKey != "testos-testarch" {
-		t.Fatalf("PlatformKey = %q, want %q", options.PlatformKey, "testos-testarch")
-	}
-	if options.ArtifactPath != "/tmp/custom-opentunnel" {
-		t.Fatalf("ArtifactPath = %q, want %q", options.ArtifactPath, "/tmp/custom-opentunnel")
 	}
 }
 

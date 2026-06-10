@@ -1,8 +1,8 @@
 # OpenTunnel Docker Relay
 
-This Docker image runs the OpenTunnel relay and serves the same `opentunnel` binary as the temporary `/cli` artifact. It is an operator deployment path for the relay. It is not a package-manager or install-to-system distribution path for end users.
+This Docker image runs the OpenTunnel relay and includes temporary CLI binaries for relay bootstrap downloads. It is an operator deployment path for the relay. It is not a package-manager or install-to-system distribution path for end users.
 
-## Build
+## Build And Run
 
 From the repository root:
 
@@ -10,22 +10,23 @@ From the repository root:
 docker build -f deploy/docker/Dockerfile -t opentunnel-relay:dev .
 ```
 
-## Run
-
 For local testing:
 
 ```bash
-docker run --rm -p 8080:8080 opentunnel-relay:dev \
-  relay \
-  --listen :8080 \
-  --public-url http://localhost:8080 \
-  --artifact-path /opentunnel \
-  --version dev
+docker run --rm -p 8080:8080 opentunnel-relay:dev relay --public-url http://localhost:8080
 ```
 
-For public deployment, set `--public-url` to the HTTPS origin users will fetch. Terminate TLS with a reverse proxy or load balancer in front of the container.
+For public deployment, set `--public-url` to the HTTPS origin users will fetch:
+
+```bash
+docker run --rm -p 8080:8080 opentunnel-relay:dev relay --public-url https://relay.example.com
+```
+
+Terminate TLS with a reverse proxy or load balancer in front of the container.
 
 Override relay defaults by passing command arguments, as shown above. The relay does not read `OPENTUNNEL_*` environment variables in Docker.
+
+The image includes `/opentunnel-artifacts` with Linux and macOS temporary CLI binaries for `amd64` and `arm64`. The relay serves those binaries from `/cli/bin/...` for bootstrap clients.
 
 ## Smoke Test
 

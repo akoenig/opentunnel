@@ -12,20 +12,16 @@ This repository contains the public v1 self-hosted implementation and release-op
 
 ## Quick Start
 
-Build the CLI:
+Build the relay image:
 
 ```bash
-go build -o opentunnel ./cmd/opentunnel
+docker build -f deploy/docker/Dockerfile -t opentunnel-relay:dev .
 ```
 
 Run a local relay:
 
 ```bash
-./opentunnel relay \
-  --listen 127.0.0.1:8080 \
-  --public-url http://127.0.0.1:8080 \
-  --artifact-path ./opentunnel \
-  --version dev
+docker run --rm -p 8080:8080 opentunnel-relay:dev relay --public-url http://127.0.0.1:8080
 ```
 
 Start a host session through the public `/cli` path:
@@ -63,8 +59,8 @@ CI also builds downloadable binaries for:
 
 - `linux-amd64`
 - `linux-arm64`
-- `linux-armv7`
-- `darwin-arm64` Apple Silicon
+- `darwin-amd64`
+- `darwin-arm64`
 
 ## Documentation
 

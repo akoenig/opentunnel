@@ -28,29 +28,33 @@ Run it locally:
 ```bash
 docker run --rm -p 8080:8080 opentunnel-relay:dev \
   relay \
-  --listen :8080 \
-  --public-url http://localhost:8080 \
-  --artifact-path /opentunnel \
-  --version dev
+  --public-url http://127.0.0.1:8080
 ```
 
 Override relay defaults by passing command arguments; the Docker relay does not read `OPENTUNNEL_*` environment variables.
 
 ## systemd Deployment
 
-Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-relay.env.example` as copyable examples. Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_PATH` points to the compatible binary served by `/cli`.
+Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-relay.env.example` as copyable examples. Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_DIR` points to the compatible artifacts served by `/cli`.
 
 TLS is normally terminated by a reverse proxy or load balancer in front of the relay.
 
 ## Manual Release Process
 
-1. Choose a version string, such as `v1.0.0`.
-2. Run the verification commands above.
-3. Build the binary with `go build -o opentunnel ./cmd/opentunnel`.
-4. Deploy the binary to the relay host.
-5. Start the relay with `--artifact-path` pointing to that binary and `--version` set to the chosen version.
-6. Verify `/cli`, `/cli/bin/opentunnel-v1.0.0-linux-amd64`, and the `.sha256` endpoint for the version and platform you deployed.
-7. Verify the public flow: `curl -fsSL https://relay.example.com/cli | sh -s -- create`, then run the generated `exec` command.
+1. Choose a version string, such as `1.0.0`.
+2. Update `VERSION` to `1.0.0` before building.
+3. Run the verification commands above.
+4. Build the Docker image with `docker build -f deploy/docker/Dockerfile -t opentunnel-relay:1.0.0 .`.
+5. Deploy the image to the relay host.
+6. Start the relay with `docker run -p 8080:8080 opentunnel-relay:1.0.0 relay --public-url https://relay.example.com`.
+7. Verify `/cli`.
+8. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-amd64` and `/cli/bin/opentunnel-1.0.0-linux-amd64.sha256`.
+9. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-arm64` and `/cli/bin/opentunnel-1.0.0-linux-arm64.sha256`.
+10. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-amd64` and `/cli/bin/opentunnel-1.0.0-darwin-amd64.sha256`.
+11. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-arm64` and `/cli/bin/opentunnel-1.0.0-darwin-arm64.sha256`.
+12. Verify the public flow: `curl -fsSL https://relay.example.com/cli | sh -s -- create`, then run the generated `exec` command.
+
+Artifact filenames are derived from `VERSION`. Development builds with `VERSION=dev` produce `/cli/bin/opentunnel-dev-*` paths instead of `opentunnel-1.0.0-*` paths.
 
 ## Checksum Boundary
 

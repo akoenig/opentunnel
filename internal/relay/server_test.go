@@ -14,56 +14,20 @@ import (
 	"testing"
 	"time"
 
+	"opentunnel/internal/artifact"
+
 	"github.com/gorilla/websocket"
 )
 
 const readTimeout = time.Second
 
-func TestCLIBootstrapUsesConfiguredArtifactCoordinates(t *testing.T) {
-	binaryPath := writeTestBinary(t, []byte("binary bytes"))
-	checksum := testSHA256([]byte("binary bytes"))
-	server := NewServer(WithCLIArtifacts(CLIArtifacts{
-		RelayOrigin: "https://relay.example.com",
-		Version:     "1.2.3",
-		PlatformKey: "linux-amd64",
-		BinaryPath:  binaryPath,
-	}))
-	httpServer := httptest.NewServer(server.Handler())
-	defer httpServer.Close()
-
-	response, body := getRelayPath(t, httpServer.URL, "/cli")
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("status mismatch: got %d want %d", response.StatusCode, http.StatusOK)
-	}
-	contentType := response.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "text/x-shellscript") && !strings.HasPrefix(contentType, "text/plain") {
-		t.Fatalf("content type mismatch: got %q", contentType)
-	}
-	for _, want := range []string{
-		"relay_origin='https://relay.example.com'",
-		"version='1.2.3'",
-		"platform='linux-amd64'",
-		"expected_checksum='" + checksum + "'",
-		"/cli/bin/opentunnel-1.2.3-linux-amd64",
-		"/cli/bin/opentunnel-1.2.3-linux-amd64.sha256",
-	} {
-		if !strings.Contains(string(body), want) {
-			t.Fatalf("bootstrap missing %q in:\n%s", want, string(body))
-		}
-	}
-}
-
 func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
-	binary := []byte("server options binary")
-	binaryPath := writeTestBinary(t, binary)
-	checksum := testSHA256(binary)
+	version := "4.5.6"
+	artifactDir := writeTestArtifactDir(t, version)
 	server, err := NewServerWithOptions(ServerOptions{
-		PublicURL:    "https://relay.example.com",
-		Version:      "4.5.6",
-		ArtifactPath: binaryPath,
-		PlatformKey:  "linux-arm64",
+		PublicURL:   "https://relay.example.com",
+		Version:     version,
+		ArtifactDir: artifactDir,
 	})
 	if err != nil {
 		t.Fatalf("NewServerWithOptions() error = %v", err)
@@ -76,75 +40,108 @@ func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
 	if bootstrapResponse.StatusCode != http.StatusOK {
 		t.Fatalf("bootstrap status mismatch: got %d want %d", bootstrapResponse.StatusCode, http.StatusOK)
 	}
-	if !strings.Contains(string(bootstrapBody), "version='4.5.6'") {
-		t.Fatalf("bootstrap missing configured version in:\n%s", bootstrapBody)
+	contentType := bootstrapResponse.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "text/x-shellscript") && !strings.HasPrefix(contentType, "text/plain") {
+		t.Fatalf("content type mismatch: got %q", contentType)
+	}
+	for _, want := range []string{
+		"relay_origin='https://relay.example.com'",
+		"version='" + version + "'",
+	} {
+		if !strings.Contains(string(bootstrapBody), want) {
+			t.Fatalf("bootstrap missing %q in:\n%s", want, string(bootstrapBody))
+		}
 	}
 
-	binaryResponse, binaryBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-4.5.6-linux-arm64")
-	defer binaryResponse.Body.Close()
-	if binaryResponse.StatusCode != http.StatusOK {
-		t.Fatalf("binary status mismatch: got %d want %d", binaryResponse.StatusCode, http.StatusOK)
-	}
-	if !bytes.Equal(binaryBody, binary) {
-		t.Fatalf("binary body mismatch: got %v want %v", binaryBody, binary)
-	}
+	for _, platform := range artifact.SupportedPlatforms() {
+		binary := []byte("binary " + platform)
+		checksum := testSHA256(binary)
+		binaryPath := "/cli/bin/opentunnel-" + version + "-" + platform
+		checksumPath := binaryPath + ".sha256"
+		for _, want := range []string{
+			platform + ") expected_checksum='" + checksum + "'",
+		} {
+			if !strings.Contains(string(bootstrapBody), want) {
+				t.Fatalf("bootstrap missing %q in:\n%s", want, string(bootstrapBody))
+			}
+		}
 
-	checksumResponse, checksumBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-4.5.6-linux-arm64.sha256")
-	defer checksumResponse.Body.Close()
-	if checksumResponse.StatusCode != http.StatusOK {
-		t.Fatalf("checksum status mismatch: got %d want %d", checksumResponse.StatusCode, http.StatusOK)
-	}
-	if got := strings.TrimSpace(string(checksumBody)); got != checksum {
-		t.Fatalf("checksum body mismatch: got %q want %q", got, checksum)
+		binaryResponse, binaryBody := getRelayPath(t, httpServer.URL, binaryPath)
+		defer binaryResponse.Body.Close()
+		if binaryResponse.StatusCode != http.StatusOK {
+			t.Fatalf("%s binary status mismatch: got %d want %d", platform, binaryResponse.StatusCode, http.StatusOK)
+		}
+		if contentType := binaryResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/octet-stream") {
+			t.Fatalf("%s binary content type mismatch: got %q", platform, contentType)
+		}
+		if !bytes.Equal(binaryBody, binary) {
+			t.Fatalf("%s binary body mismatch: got %v want %v", platform, binaryBody, binary)
+		}
+
+		checksumResponse, checksumBody := getRelayPath(t, httpServer.URL, checksumPath)
+		defer checksumResponse.Body.Close()
+		if checksumResponse.StatusCode != http.StatusOK {
+			t.Fatalf("%s checksum status mismatch: got %d want %d", platform, checksumResponse.StatusCode, http.StatusOK)
+		}
+		if contentType := checksumResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+			t.Fatalf("%s checksum content type mismatch: got %q", platform, contentType)
+		}
+		if got := strings.TrimSpace(string(checksumBody)); got != checksum {
+			t.Fatalf("%s checksum body mismatch: got %q want %q", platform, got, checksum)
+		}
 	}
 }
 
 func TestNewServerWithOptionsRejectsInvalidCLIArtifactOptions(t *testing.T) {
-	binaryPath := writeTestBinary(t, []byte("binary bytes"))
+	artifactDir := writeTestArtifactDir(t, "1.2.3")
+	incompleteArtifactDir := writeTestArtifactDir(t, "1.2.3")
+	missingPath, err := artifact.ArtifactPath(incompleteArtifactDir, "1.2.3", "linux-amd64")
+	if err != nil {
+		t.Fatalf("artifact path: %v", err)
+	}
+	if err := os.Remove(missingPath); err != nil {
+		t.Fatalf("remove test artifact: %v", err)
+	}
 	tests := []struct {
 		name    string
 		options ServerOptions
 	}{
 		{
-			name: "public url without artifact path",
+			name: "public url without artifact dir",
 			options: ServerOptions{
-				PublicURL:   "https://relay.example.com",
-				Version:     "1.2.3",
-				PlatformKey: "linux-amd64",
+				PublicURL: "https://relay.example.com",
+				Version:   "1.2.3",
 			},
 		},
 		{
 			name: "public url without version",
 			options: ServerOptions{
-				PublicURL:    "https://relay.example.com",
-				ArtifactPath: binaryPath,
-				PlatformKey:  "linux-amd64",
-			},
-		},
-		{
-			name: "public url without platform key",
-			options: ServerOptions{
-				PublicURL:    "https://relay.example.com",
-				Version:      "1.2.3",
-				ArtifactPath: binaryPath,
+				PublicURL:   "https://relay.example.com",
+				ArtifactDir: artifactDir,
 			},
 		},
 		{
 			name: "invalid public url",
 			options: ServerOptions{
-				PublicURL:    "https://relay.example.com/path",
-				Version:      "1.2.3",
-				ArtifactPath: binaryPath,
-				PlatformKey:  "linux-amd64",
+				PublicURL:   "https://relay.example.com/path",
+				Version:     "1.2.3",
+				ArtifactDir: artifactDir,
 			},
 		},
 		{
-			name: "missing artifact file",
+			name: "missing artifact dir",
 			options: ServerOptions{
-				PublicURL:    "https://relay.example.com",
-				Version:      "1.2.3",
-				ArtifactPath: filepath.Join(t.TempDir(), "missing-opentunnel"),
-				PlatformKey:  "linux-amd64",
+				PublicURL:   "https://relay.example.com",
+				Version:     "1.2.3",
+				ArtifactDir: filepath.Join(t.TempDir(), "missing-artifacts"),
+			},
+		},
+		{
+			name: "incomplete artifact dir",
+			options: ServerOptions{
+				PublicURL:   "https://relay.example.com",
+				Version:     "1.2.3",
+				ArtifactDir: incompleteArtifactDir,
 			},
 		},
 	}
@@ -159,60 +156,33 @@ func TestNewServerWithOptionsRejectsInvalidCLIArtifactOptions(t *testing.T) {
 	}
 }
 
-func TestCLIBinaryAndChecksumAreServedFromConfiguredArtifact(t *testing.T) {
-	binary := []byte{0, 1, 2, 3, 255}
-	binaryPath := writeTestBinary(t, binary)
-	checksum := testSHA256(binary)
-	server := NewServer(WithCLIArtifacts(CLIArtifacts{
-		RelayOrigin: "http://relay.example.com",
-		Version:     "9.8.7",
-		PlatformKey: "darwin-arm64",
-		BinaryPath:  binaryPath,
-	}))
-	httpServer := httptest.NewServer(server.Handler())
-	defer httpServer.Close()
-
-	binaryResponse, binaryBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-9.8.7-darwin-arm64")
-	defer binaryResponse.Body.Close()
-	if binaryResponse.StatusCode != http.StatusOK {
-		t.Fatalf("binary status mismatch: got %d want %d", binaryResponse.StatusCode, http.StatusOK)
-	}
-	if contentType := binaryResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/octet-stream") {
-		t.Fatalf("binary content type mismatch: got %q", contentType)
-	}
-	if !bytes.Equal(binaryBody, binary) {
-		t.Fatalf("binary body mismatch: got %v want %v", binaryBody, binary)
-	}
-
-	checksumResponse, checksumBody := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-9.8.7-darwin-arm64.sha256")
-	defer checksumResponse.Body.Close()
-	if checksumResponse.StatusCode != http.StatusOK {
-		t.Fatalf("checksum status mismatch: got %d want %d", checksumResponse.StatusCode, http.StatusOK)
-	}
-	if contentType := checksumResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
-		t.Fatalf("checksum content type mismatch: got %q", contentType)
-	}
-	if got := strings.TrimSpace(string(checksumBody)); got != checksum {
-		t.Fatalf("checksum body mismatch: got %q want %q", got, checksum)
-	}
-}
-
 func TestUnknownCLIArtifactPathReturnsNotFound(t *testing.T) {
-	binaryPath := writeTestBinary(t, []byte("binary bytes"))
-	server := NewServer(WithCLIArtifacts(CLIArtifacts{
-		RelayOrigin: "http://relay.example.com",
-		Version:     "1.2.3",
-		PlatformKey: "linux-amd64",
-		BinaryPath:  binaryPath,
-	}))
+	version := "1.2.3"
+	artifactDir := writeTestArtifactDir(t, version)
+	if err := os.WriteFile(filepath.Join(artifactDir, "extra-file"), []byte("secret"), 0o600); err != nil {
+		t.Fatalf("write extra file: %v", err)
+	}
+	server, err := NewServerWithOptions(ServerOptions{
+		PublicURL:   "http://relay.example.com",
+		Version:     version,
+		ArtifactDir: artifactDir,
+	})
+	if err != nil {
+		t.Fatalf("NewServerWithOptions() error = %v", err)
+	}
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
-	response, _ := getRelayPath(t, httpServer.URL, "/cli/bin/opentunnel-1.2.3-linux-arm64")
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusNotFound {
-		t.Fatalf("status mismatch: got %d want %d", response.StatusCode, http.StatusNotFound)
+	for _, path := range []string{
+		"/cli/bin/opentunnel-" + version + "-windows-amd64",
+		"/cli/bin/opentunnel-" + version + "-linux-amd64.exe",
+		"/cli/bin/extra-file",
+	} {
+		response, _ := getRelayPath(t, httpServer.URL, path)
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s status mismatch: got %d want %d", path, response.StatusCode, http.StatusNotFound)
+		}
 	}
 }
 
@@ -441,14 +411,20 @@ func readMessage(t *testing.T, conn *websocket.Conn) (int, []byte, error) {
 	return conn.ReadMessage()
 }
 
-func writeTestBinary(t *testing.T, contents []byte) string {
+func writeTestArtifactDir(t *testing.T, version string) string {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "opentunnel")
-	if err := os.WriteFile(path, contents, 0o600); err != nil {
-		t.Fatalf("write test binary: %v", err)
+	dir := t.TempDir()
+	for _, platform := range artifact.SupportedPlatforms() {
+		path, err := artifact.ArtifactPath(dir, version, platform)
+		if err != nil {
+			t.Fatalf("artifact path: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("binary "+platform), 0o600); err != nil {
+			t.Fatalf("write test artifact: %v", err)
+		}
 	}
-	return path
+	return dir
 }
 
 func testSHA256(contents []byte) string {

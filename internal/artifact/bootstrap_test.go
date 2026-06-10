@@ -9,12 +9,23 @@ import (
 	"testing"
 )
 
+const (
+	linuxAMD64Checksum  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	linuxARM64Checksum  = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	darwinAMD64Checksum = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	darwinARM64Checksum = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+)
+
 func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 	script, err := RenderBootstrap(BootstrapConfig{
 		RelayOrigin: "http://relay.example",
 		Version:     "dev",
-		PlatformKey: "linux-amd64",
-		Checksum:    "abc123",
+		Artifacts: []BootstrapArtifact{
+			{PlatformKey: "linux-amd64", Checksum: linuxAMD64Checksum},
+			{PlatformKey: "linux-arm64", Checksum: linuxARM64Checksum},
+			{PlatformKey: "darwin-amd64", Checksum: darwinAMD64Checksum},
+			{PlatformKey: "darwin-arm64", Checksum: darwinARM64Checksum},
+		},
 	})
 	if err != nil {
 		t.Fatalf("RenderBootstrap returned error: %v", err)
@@ -22,8 +33,20 @@ func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 
 	wants := []string{
 		"relay_origin='http://relay.example'",
-		"/cli/bin/opentunnel-dev-linux-amd64",
-		"/cli/bin/opentunnel-dev-linux-amd64.sha256",
+		"os_name=$(uname -s)",
+		"arch_name=$(uname -m)",
+		"platform=linux-amd64",
+		"platform=linux-arm64",
+		"platform=darwin-amd64",
+		"platform=darwin-arm64",
+		"linux-amd64) expected_checksum='" + linuxAMD64Checksum + "' ;;",
+		"linux-arm64) expected_checksum='" + linuxARM64Checksum + "' ;;",
+		"darwin-amd64) expected_checksum='" + darwinAMD64Checksum + "' ;;",
+		"darwin-arm64) expected_checksum='" + darwinARM64Checksum + "' ;;",
+		"binary_path=\"/cli/bin/opentunnel-${version}-${platform}\"",
+		"checksum_path=\"${binary_path}.sha256\"",
+		"binary_url=\"${relay_origin}${binary_path}\"",
+		"checksum_url=\"${relay_origin}${checksum_path}\"",
 		"umask 077",
 		"${TMPDIR:-/tmp}",
 		"id -u",
@@ -48,26 +71,25 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 	}{
 		{
 			name: "relay origin",
-			cfg: BootstrapConfig{
-				Version:     "dev",
-				PlatformKey: "linux-amd64",
-				Checksum:    "abc123",
-			},
+			cfg:  BootstrapConfig{Version: "dev", Artifacts: validBootstrapArtifactsForTest()},
 		},
 		{
 			name: "version",
-			cfg: BootstrapConfig{
-				RelayOrigin: "http://relay.example",
-				PlatformKey: "linux-amd64",
-				Checksum:    "abc123",
-			},
+			cfg:  BootstrapConfig{RelayOrigin: "http://relay.example", Artifacts: validBootstrapArtifactsForTest()},
 		},
 		{
-			name: "platform key",
+			name: "artifacts",
 			cfg: BootstrapConfig{
 				RelayOrigin: "http://relay.example",
 				Version:     "dev",
-				Checksum:    "abc123",
+			},
+		},
+		{
+			name: "unsupported platform",
+			cfg: BootstrapConfig{
+				RelayOrigin: "http://relay.example",
+				Version:     "dev",
+				Artifacts:   []BootstrapArtifact{{PlatformKey: "freebsd-amd64", Checksum: linuxAMD64Checksum}},
 			},
 		},
 		{
@@ -75,7 +97,38 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 			cfg: BootstrapConfig{
 				RelayOrigin: "http://relay.example",
 				Version:     "dev",
-				PlatformKey: "linux-amd64",
+				Artifacts: []BootstrapArtifact{
+					{PlatformKey: "linux-amd64", Checksum: ""},
+					{PlatformKey: "linux-arm64", Checksum: linuxARM64Checksum},
+					{PlatformKey: "darwin-amd64", Checksum: darwinAMD64Checksum},
+					{PlatformKey: "darwin-arm64", Checksum: darwinARM64Checksum},
+				},
+			},
+		},
+		{
+			name: "missing supported platform",
+			cfg: BootstrapConfig{
+				RelayOrigin: "http://relay.example",
+				Version:     "dev",
+				Artifacts: []BootstrapArtifact{
+					{PlatformKey: "linux-amd64", Checksum: linuxAMD64Checksum},
+					{PlatformKey: "linux-arm64", Checksum: linuxARM64Checksum},
+					{PlatformKey: "darwin-amd64", Checksum: darwinAMD64Checksum},
+				},
+			},
+		},
+		{
+			name: "duplicate platform",
+			cfg: BootstrapConfig{
+				RelayOrigin: "http://relay.example",
+				Version:     "dev",
+				Artifacts: []BootstrapArtifact{
+					{PlatformKey: "linux-amd64", Checksum: linuxAMD64Checksum},
+					{PlatformKey: "linux-amd64", Checksum: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+					{PlatformKey: "linux-arm64", Checksum: linuxARM64Checksum},
+					{PlatformKey: "darwin-amd64", Checksum: darwinAMD64Checksum},
+					{PlatformKey: "darwin-arm64", Checksum: darwinARM64Checksum},
+				},
 			},
 		},
 	}
@@ -84,6 +137,37 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := RenderBootstrap(tt.cfg); err == nil {
 				t.Fatal("RenderBootstrap returned nil error")
+			}
+		})
+	}
+}
+
+func TestRenderBootstrapRejectsInvalidChecksums(t *testing.T) {
+	tests := []struct {
+		name     string
+		checksum string
+	}{
+		{name: "empty", checksum: ""},
+		{name: "too short", checksum: strings.Repeat("a", 63)},
+		{name: "too long", checksum: strings.Repeat("a", 65)},
+		{name: "non hex", checksum: strings.Repeat("a", 63) + "g"},
+		{name: "shell metacharacters", checksum: strings.Repeat("a", 63) + "$"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			artifacts := validBootstrapArtifactsForTest()
+			artifacts[0].Checksum = tt.checksum
+			_, err := RenderBootstrap(BootstrapConfig{
+				RelayOrigin: "http://relay.example",
+				Version:     "dev",
+				Artifacts:   artifacts,
+			})
+			if err == nil {
+				t.Fatal("RenderBootstrap returned nil error")
+			}
+			if !strings.Contains(err.Error(), "checksum") {
+				t.Fatalf("RenderBootstrap error %q does not mention checksum", err)
 			}
 		})
 	}
@@ -109,8 +193,7 @@ func TestRenderBootstrapRejectsInvalidRelayOrigins(t *testing.T) {
 			_, err := RenderBootstrap(BootstrapConfig{
 				RelayOrigin: tt.relayOrigin,
 				Version:     "dev",
-				PlatformKey: "linux-amd64",
-				Checksum:    "abc123",
+				Artifacts:   validBootstrapArtifactsForTest(),
 			})
 			if err == nil {
 				t.Fatal("RenderBootstrap returned nil error")
@@ -122,10 +205,35 @@ func TestRenderBootstrapRejectsInvalidRelayOrigins(t *testing.T) {
 	}
 }
 
+func TestRenderBootstrapFailsForUnsupportedRuntimePlatform(t *testing.T) {
+	script := renderBootstrapForTest(t)
+	runDir := t.TempDir()
+	toolsDir := t.TempDir()
+	writeExecutable(t, filepath.Join(toolsDir, "uname"), `#!/bin/sh
+if [ "$1" = "-s" ]; then
+  printf 'SunOS\n'
+else
+  printf 'sparc\n'
+fi
+`)
+
+	cmd := exec.Command("/bin/sh", script)
+	cmd.Dir = runDir
+	cmd.Env = []string{"PATH=" + toolsDir}
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("bootstrap exited successfully; output:\n%s", output)
+	}
+	if !strings.Contains(string(output), "opentunnel: unsupported platform SunOS/sparc") {
+		t.Fatalf("bootstrap did not report unsupported platform; output:\n%s", output)
+	}
+}
+
 func TestRenderBootstrapFailsClosedWhenChecksumToolsAreMissing(t *testing.T) {
 	script := renderBootstrapForTest(t)
 	runDir := t.TempDir()
 	toolsDir := t.TempDir()
+	writeLinuxUname(t, toolsDir)
 	writeExecutable(t, filepath.Join(toolsDir, "mktemp"), `#!/bin/sh
 exec /usr/bin/mktemp "$@"
 `)
@@ -142,7 +250,7 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "$out" in
-  *.sha256) printf 'expected-checksum  opentunnel\n' > "$out" ;;
+  *.sha256) printf '`+linuxAMD64Checksum+`  opentunnel\n' > "$out" ;;
   *) printf '#!/bin/sh\nprintf '\''EXECUTED_WITHOUT_HASH\n'\''\n' > "$out" ;;
 esac
 `)
@@ -190,15 +298,20 @@ func TestRenderBootstrapDoesNotExecutePoisonedCache(t *testing.T) {
 	script := renderBootstrapForTest(t)
 	runDir := t.TempDir()
 	tmpDir := filepath.Join(runDir, "tmp")
-	bin := filepath.Join(tmpDir, "opentunnel-cli-"+uidForTest(), "linux-amd64", "dev", "expected-checksum", "opentunnel")
+	bin := filepath.Join(tmpDir, "opentunnel-cli-"+uidForTest(), "linux-amd64", "dev", linuxAMD64Checksum, "opentunnel")
 	writeExecutable(t, bin, `#!/bin/sh
 printf 'POISON_CACHE_EXECUTED\n'
+`)
+	toolsDir := t.TempDir()
+	writeLinuxUname(t, toolsDir)
+	writeExecutable(t, filepath.Join(toolsDir, "id"), `#!/bin/sh
+exec /usr/bin/id "$@"
 `)
 
 	cmd := exec.Command("/bin/sh", script)
 	cmd.Dir = runDir
 	cmd.Env = []string{
-		"PATH=" + t.TempDir(),
+		"PATH=" + toolsDir,
 		"TMPDIR=" + tmpDir,
 	}
 	output, err := cmd.CombinedOutput()
@@ -212,19 +325,12 @@ printf 'POISON_CACHE_EXECUTED\n'
 
 func TestRenderBootstrapDoesNotExecuteCommandSubstitutionInArtifactCoordinates(t *testing.T) {
 	tests := []struct {
-		name        string
-		version     string
-		platformKey string
+		name    string
+		version string
 	}{
 		{
-			name:        "version",
-			version:     "dev$(/usr/bin/touch MARKER)",
-			platformKey: "linux-amd64",
-		},
-		{
-			name:        "platform key",
-			version:     "dev",
-			platformKey: "linux$(/usr/bin/touch MARKER)-amd64",
+			name:    "version",
+			version: "dev$(/usr/bin/touch MARKER)",
 		},
 	}
 
@@ -235,8 +341,7 @@ func TestRenderBootstrapDoesNotExecuteCommandSubstitutionInArtifactCoordinates(t
 			script, err := RenderBootstrap(BootstrapConfig{
 				RelayOrigin: "http://relay.example",
 				Version:     strings.ReplaceAll(tt.version, "MARKER", marker),
-				PlatformKey: strings.ReplaceAll(tt.platformKey, "MARKER", marker),
-				Checksum:    "expected-checksum",
+				Artifacts:   validBootstrapArtifactsForTest(),
 			})
 			if err != nil {
 				t.Fatalf("RenderBootstrap returned error: %v", err)
@@ -245,6 +350,7 @@ func TestRenderBootstrapDoesNotExecuteCommandSubstitutionInArtifactCoordinates(t
 			writeExecutable(t, path, script)
 
 			toolsDir := t.TempDir()
+			writeLinuxUname(t, toolsDir)
 			writeExecutable(t, filepath.Join(toolsDir, "mktemp"), `#!/bin/sh
 exec /usr/bin/mktemp "$@"
 `)
@@ -270,14 +376,17 @@ func TestRenderBootstrapDoesNotUsePrecreatedPredictableCache(t *testing.T) {
 	script := renderBootstrapForTest(t)
 	runDir := t.TempDir()
 	tmpDir := filepath.Join(runDir, "tmp")
-	bin := filepath.Join(tmpDir, "opentunnel-cli-"+uidForTest(), "linux-amd64", "dev", "expected-checksum", "opentunnel")
+	bin := filepath.Join(tmpDir, "opentunnel-cli-"+uidForTest(), "linux-amd64", "dev", linuxAMD64Checksum, "opentunnel")
 	writeExecutable(t, bin, `#!/bin/sh
 printf 'PREDICTABLE_CACHE_EXECUTED\n'
 `)
 
 	toolsDir := t.TempDir()
+	checksumCalls := filepath.Join(runDir, "checksum-calls")
+	writeLinuxUname(t, toolsDir)
 	writeExecutable(t, filepath.Join(toolsDir, "sha256sum"), `#!/bin/sh
-printf 'expected-checksum  %s\n' "$1"
+printf '%s\n' "$1" >> "$CHECKSUM_CALLS"
+printf '0000000000000000000000000000000000000000000000000000000000000000  %s\n' "$1"
 `)
 	writeExecutable(t, filepath.Join(toolsDir, "awk"), `#!/bin/sh
 if [ "$#" -gt 1 ]; then
@@ -291,16 +400,41 @@ printf '%s\n' "$1"
 	writeExecutable(t, filepath.Join(toolsDir, "mktemp"), `#!/bin/sh
 exec /usr/bin/mktemp "$@"
 `)
+	writeExecutable(t, filepath.Join(toolsDir, "id"), `#!/bin/sh
+exec /usr/bin/id "$@"
+`)
+	writeExecutable(t, filepath.Join(toolsDir, "mkdir"), `#!/bin/sh
+exec /usr/bin/mkdir "$@"
+`)
+	writeExecutable(t, filepath.Join(toolsDir, "chmod"), `#!/bin/sh
+exec /usr/bin/chmod "$@"
+`)
+	writeExecutable(t, filepath.Join(toolsDir, "rm"), `#!/bin/sh
+exec /usr/bin/rm "$@"
+`)
 
 	cmd := exec.Command("/bin/sh", script)
 	cmd.Dir = runDir
 	cmd.Env = []string{
 		"PATH=" + toolsDir,
 		"TMPDIR=" + tmpDir,
+		"CHECKSUM_CALLS=" + checksumCalls,
 	}
-	output, _ := cmd.CombinedOutput()
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("bootstrap exited successfully; output:\n%s", output)
+	}
 	if strings.Contains(string(output), "PREDICTABLE_CACHE_EXECUTED") {
 		t.Fatalf("bootstrap executed precreated predictable cache binary; output:\n%s", output)
+	}
+	if !strings.Contains(readTestFile(t, checksumCalls), bin) {
+		t.Fatalf("bootstrap did not verify precreated cache binary before rejecting it; output:\n%s", output)
+	}
+	if _, err := os.Stat(bin); !os.IsNotExist(err) {
+		t.Fatalf("precreated cache binary was not removed; stat error: %v", err)
+	}
+	if !strings.Contains(string(output), "curl or wget is required") {
+		t.Fatalf("bootstrap did not continue past cache rejection to downloader selection; output:\n%s", output)
 	}
 }
 
@@ -329,7 +463,7 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "$url" in
-  *.sha256) printf 'expected-checksum  opentunnel\n' > "$out" ;;
+  *.sha256) printf '`+linuxAMD64Checksum+`  opentunnel\n' > "$out" ;;
   *)
     count=0
     if [ -f "$BINARY_DOWNLOADS" ]; then
@@ -348,7 +482,7 @@ if [ -f "$CHECKSUM_CALLS" ]; then
 fi
 count=$((count + 1))
 printf '%s\n' "$count" > "$CHECKSUM_CALLS"
-printf 'expected-checksum  %s\n' "$1"
+printf '`+linuxAMD64Checksum+`  %s\n' "$1"
 `)
 
 	for i := 0; i < 2; i++ {
@@ -394,8 +528,7 @@ func renderBootstrapForTest(t *testing.T) string {
 	script, err := RenderBootstrap(BootstrapConfig{
 		RelayOrigin: "http://relay.example",
 		Version:     "dev",
-		PlatformKey: "linux-amd64",
-		Checksum:    "expected-checksum",
+		Artifacts:   validBootstrapArtifactsForTest(),
 	})
 	if err != nil {
 		t.Fatalf("RenderBootstrap returned error: %v", err)
@@ -403,6 +536,15 @@ func renderBootstrapForTest(t *testing.T) string {
 	path := filepath.Join(t.TempDir(), "bootstrap.sh")
 	writeExecutable(t, path, script)
 	return path
+}
+
+func validBootstrapArtifactsForTest() []BootstrapArtifact {
+	return []BootstrapArtifact{
+		{PlatformKey: "linux-amd64", Checksum: linuxAMD64Checksum},
+		{PlatformKey: "linux-arm64", Checksum: linuxARM64Checksum},
+		{PlatformKey: "darwin-amd64", Checksum: darwinAMD64Checksum},
+		{PlatformKey: "darwin-arm64", Checksum: darwinARM64Checksum},
+	}
 }
 
 func readTestFile(t *testing.T, path string) string {
@@ -422,4 +564,15 @@ func writeExecutable(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o700); err != nil {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}
+}
+
+func writeLinuxUname(t *testing.T, toolsDir string) {
+	t.Helper()
+	writeExecutable(t, filepath.Join(toolsDir, "uname"), `#!/bin/sh
+if [ "$1" = "-s" ]; then
+  printf 'Linux\n'
+else
+  printf 'x86_64\n'
+fi
+`)
 }

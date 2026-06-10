@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"opentunnel/internal/artifact"
@@ -19,30 +20,25 @@ type Server struct {
 	cliArtifacts *CLIArtifacts
 }
 
+// CLIArtifact configures one optional CLI artifact response served by the relay.
+type CLIArtifact struct {
+	PlatformKey string
+	BinaryPath  string
+	Checksum    string
+}
+
 // CLIArtifacts configures optional CLI artifact responses served by the relay.
 type CLIArtifacts struct {
 	RelayOrigin string
 	Version     string
-	PlatformKey string
-	BinaryPath  string
+	Artifacts   map[string]CLIArtifact
 }
 
 // ServerOptions configures a relay server with plan-defined options.
 type ServerOptions struct {
-	PublicURL    string
-	Version      string
-	ArtifactPath string
-	PlatformKey  string
-}
-
-// Option configures a relay server.
-type Option func(*Server)
-
-// WithCLIArtifacts enables serving bootstrap, binary, and checksum artifacts.
-func WithCLIArtifacts(artifacts CLIArtifacts) Option {
-	return func(s *Server) {
-		s.cliArtifacts = &artifacts
-	}
+	PublicURL   string
+	Version     string
+	ArtifactDir string
 }
 
 type session struct {
@@ -53,41 +49,62 @@ type session struct {
 }
 
 // NewServer creates an in-memory relay server.
-func NewServer(opts ...Option) *Server {
-	server := newServer()
-	for _, opt := range opts {
-		opt(server)
-	}
-	return server
+func NewServer() *Server {
+	return newServer()
 }
 
 // NewServerWithOptions creates an in-memory relay server from explicit options.
 func NewServerWithOptions(options ServerOptions) (*Server, error) {
 	server := newServer()
-	if options.PublicURL == "" && options.Version == "" && options.ArtifactPath == "" && options.PlatformKey == "" {
+	if options.PublicURL == "" && options.Version == "" && options.ArtifactDir == "" {
 		return server, nil
 	}
 
-	artifacts := CLIArtifacts{
-		RelayOrigin: options.PublicURL,
-		Version:     options.Version,
-		PlatformKey: options.PlatformKey,
-		BinaryPath:  options.ArtifactPath,
-	}
-	checksum, err := artifact.SHA256File(artifacts.BinaryPath)
+	artifacts, err := loadCLIArtifacts(options.PublicURL, options.Version, options.ArtifactDir)
 	if err != nil {
-		return nil, fmt.Errorf("validate cli artifact: %w", err)
+		return nil, err
 	}
+	server.cliArtifacts = artifacts
+	return server, nil
+}
+
+func loadCLIArtifacts(relayOrigin, version, artifactDir string) (*CLIArtifacts, error) {
+	artifacts := CLIArtifacts{
+		RelayOrigin: relayOrigin,
+		Version:     version,
+		Artifacts:   make(map[string]CLIArtifact, len(artifact.SupportedPlatforms())),
+	}
+	bootstrapArtifacts := make([]artifact.BootstrapArtifact, 0, len(artifact.SupportedPlatforms()))
+
+	for _, platform := range artifact.SupportedPlatforms() {
+		binaryPath, err := artifact.ArtifactPath(artifactDir, version, platform)
+		if err != nil {
+			return nil, fmt.Errorf("validate cli artifacts: %w", err)
+		}
+		checksum, err := artifact.SHA256File(binaryPath)
+		if err != nil {
+			return nil, fmt.Errorf("validate cli artifacts: %w", err)
+		}
+		artifacts.Artifacts[platform] = CLIArtifact{
+			PlatformKey: platform,
+			BinaryPath:  binaryPath,
+			Checksum:    checksum,
+		}
+		bootstrapArtifacts = append(bootstrapArtifacts, artifact.BootstrapArtifact{
+			PlatformKey: platform,
+			Checksum:    checksum,
+		})
+	}
+
 	if _, err := artifact.RenderBootstrap(artifact.BootstrapConfig{
 		RelayOrigin: artifacts.RelayOrigin,
 		Version:     artifacts.Version,
-		PlatformKey: artifacts.PlatformKey,
-		Checksum:    checksum,
+		Artifacts:   bootstrapArtifacts,
 	}); err != nil {
-		return nil, fmt.Errorf("validate cli artifact: %w", err)
+		return nil, fmt.Errorf("validate cli artifacts: %w", err)
 	}
-	server.cliArtifacts = &artifacts
-	return server, nil
+
+	return &artifacts, nil
 }
 
 func newServer() *Server {
@@ -136,7 +153,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) handleCLIArtifact(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodGet || (r.URL.Path != "/cli" && r.URL.Path != s.binaryPath() && r.URL.Path != s.checksumPath()) {
+	if r.Method != http.MethodGet || (r.URL.Path != "/cli" && !strings.HasPrefix(r.URL.Path, "/cli/bin/")) {
 		return false
 	}
 	if s.cliArtifacts == nil {
@@ -144,36 +161,43 @@ func (s *Server) handleCLIArtifact(w http.ResponseWriter, r *http.Request) bool 
 		return true
 	}
 
-	checksum, err := artifact.SHA256File(s.cliArtifacts.BinaryPath)
-	if err != nil {
-		http.Error(w, "artifact unavailable", http.StatusInternalServerError)
+	if r.URL.Path == "/cli" {
+		s.serveBootstrap(w)
 		return true
 	}
 
-	if r.URL.Path == "/cli" {
-		s.serveBootstrap(w, checksum)
-		return true
-	}
-	if r.URL.Path == s.binaryPath() {
-		s.serveBinary(w)
-		return true
-	}
-	if r.URL.Path == s.checksumPath() {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintln(w, checksum)
-		return true
+	for _, platform := range artifact.SupportedPlatforms() {
+		cliArtifact := s.cliArtifacts.Artifacts[platform]
+		binaryPath := cliArtifactURLPath(s.cliArtifacts.Version, platform)
+		if r.URL.Path == binaryPath {
+			s.serveBinary(w, cliArtifact)
+			return true
+		}
+		if r.URL.Path == binaryPath+".sha256" {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			fmt.Fprintln(w, cliArtifact.Checksum)
+			return true
+		}
 	}
 
 	http.NotFound(w, r)
 	return true
 }
 
-func (s *Server) serveBootstrap(w http.ResponseWriter, checksum string) {
+func (s *Server) serveBootstrap(w http.ResponseWriter) {
+	bootstrapArtifacts := make([]artifact.BootstrapArtifact, 0, len(artifact.SupportedPlatforms()))
+	for _, platform := range artifact.SupportedPlatforms() {
+		cliArtifact := s.cliArtifacts.Artifacts[platform]
+		bootstrapArtifacts = append(bootstrapArtifacts, artifact.BootstrapArtifact{
+			PlatformKey: platform,
+			Checksum:    cliArtifact.Checksum,
+		})
+	}
+
 	script, err := artifact.RenderBootstrap(artifact.BootstrapConfig{
 		RelayOrigin: s.cliArtifacts.RelayOrigin,
 		Version:     s.cliArtifacts.Version,
-		PlatformKey: s.cliArtifacts.PlatformKey,
-		Checksum:    checksum,
+		Artifacts:   bootstrapArtifacts,
 	})
 	if err != nil {
 		http.Error(w, "artifact unavailable", http.StatusInternalServerError)
@@ -183,8 +207,8 @@ func (s *Server) serveBootstrap(w http.ResponseWriter, checksum string) {
 	fmt.Fprint(w, script)
 }
 
-func (s *Server) serveBinary(w http.ResponseWriter) {
-	contents, err := os.ReadFile(s.cliArtifacts.BinaryPath)
+func (s *Server) serveBinary(w http.ResponseWriter, cliArtifact CLIArtifact) {
+	contents, err := os.ReadFile(cliArtifact.BinaryPath)
 	if err != nil {
 		http.Error(w, "artifact unavailable", http.StatusInternalServerError)
 		return
@@ -193,18 +217,8 @@ func (s *Server) serveBinary(w http.ResponseWriter) {
 	w.Write(contents)
 }
 
-func (s *Server) binaryPath() string {
-	if s.cliArtifacts == nil {
-		return ""
-	}
-	return "/cli/bin/opentunnel-" + s.cliArtifacts.Version + "-" + s.cliArtifacts.PlatformKey
-}
-
-func (s *Server) checksumPath() string {
-	if s.cliArtifacts == nil {
-		return ""
-	}
-	return s.binaryPath() + ".sha256"
+func cliArtifactURLPath(version, platform string) string {
+	return "/cli/bin/opentunnel-" + version + "-" + platform
 }
 
 func (s *Server) reserve(role, sessionID string) bool {
