@@ -11,7 +11,7 @@
 			"class_name": "RelayContainer",
 			"image": "./Dockerfile",
 			"max_instances": 1,
-			"instance_type": "basic"
+			"instance_type": "lite"
 		}
 	],
 	"durable_objects": {
