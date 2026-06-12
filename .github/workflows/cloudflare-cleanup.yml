@@ -32,7 +32,7 @@ jobs:
       - name: List and delete registry images
         run: |
           pnpm dlx wrangler@4.100.0 containers images list | tee /tmp/images.txt || true
-          grep -oE '\S*opentunnel-relay\S*:\S+' /tmp/images.txt | sort -u | while read -r image; do
+          awk '/opentunnel-relay/ && NF >= 2 {print $1 ":" $2}' /tmp/images.txt | sort -u | while read -r image; do
             echo "deleting image $image"
             pnpm dlx wrangler@4.100.0 containers images delete "$image" || true
           done
