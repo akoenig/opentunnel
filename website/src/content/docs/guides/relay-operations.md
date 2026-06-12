@@ -17,6 +17,16 @@ docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 \
 
 Override any default by passing additional flags (`--listen`, `--artifact-dir`, `--version`).
 
+## Activity logging
+
+The relay reports the number of active tunnels to stderr every 30 seconds:
+
+```text
+relay: active tunnels: 3
+```
+
+The count is the only thing reported. In line with the [security model](/concepts/security-model/), no sessions, invites, payloads, or client metadata are ever logged.
+
 ## systemd
 
 Use the copyable examples from the repository:

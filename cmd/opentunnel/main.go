@@ -173,6 +173,10 @@ func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wri
 		return 1
 	}
 
+	loggingCtx, stopLogging := context.WithCancel(ctx)
+	defer stopLogging()
+	go relayServer.LogActiveTunnels(loggingCtx, relay.ActiveTunnelLogInterval, stderr)
+
 	server := &http.Server{
 		Addr:              cmd.listen,
 		Handler:           relayServer.Handler(),
