@@ -10,7 +10,7 @@ import (
 
 // ActiveTunnelLogInterval is how often the relay reports the number of active
 // tunnels.
-const ActiveTunnelLogInterval = 30 * time.Second
+const ActiveTunnelLogInterval = 5 * time.Minute
 
 // ActiveTunnels reports the number of sessions with a connected host. A
 // tunnel counts as active from the moment the host websocket is attached

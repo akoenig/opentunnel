@@ -40,5 +40,5 @@ pnpm deploy
   public internet) and refuses to stop the container while tunnels are
   active. An idle relay scales to zero, and the next request wakes it
   within seconds.
-- The relay logs `relay: active tunnels: N` every 30 seconds; view it with
+- The relay logs `relay: active tunnels: N` every five minutes; view it with
   `pnpx wrangler tail opentunnel-relay` or in the Cloudflare dashboard.

@@ -33,7 +33,7 @@ docker run --rm -p 8080:8080 opentunnel-relay:dev \
 
 Override relay defaults by passing command arguments; the Docker relay does not read `OPENTUNNEL_*` environment variables.
 
-The relay reports the number of active tunnels to stderr every 30 seconds (`relay: active tunnels: 3`). The count is the only thing reported; no sessions, invites, payloads, or client metadata are ever logged.
+The relay reports the number of active tunnels to stderr every five minutes (`relay: active tunnels: 3`). The count is the only thing reported; no sessions, invites, payloads, or client metadata are ever logged.
 
 For supervisors and load balancers, `--health-listen` starts a separate private listener serving `GET /healthz` with the same count. It is off by default and is not part of the public endpoint; bind it to an address that is not publicly reachable.
 

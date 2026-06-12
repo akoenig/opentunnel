@@ -19,7 +19,7 @@ Override any default by passing additional flags (`--listen`, `--artifact-dir`, 
 
 ## Activity logging
 
-The relay reports the number of active tunnels to stderr every 30 seconds:
+The relay reports the number of active tunnels to stderr every five minutes:
 
 ```text
 relay: active tunnels: 3
