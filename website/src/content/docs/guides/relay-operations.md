@@ -27,6 +27,8 @@ relay: active tunnels: 3
 
 The count is the only thing reported. In line with the [security model](/concepts/security-model/), no sessions, invites, payloads, or client metadata are ever logged.
 
+For supervisors and load balancers, `--health-listen` starts a separate private listener serving `GET /healthz` with the same count. It is off by default and deliberately not part of the public endpoint; bind it to an address that is not publicly reachable.
+
 ## systemd
 
 Use the copyable examples from the repository:

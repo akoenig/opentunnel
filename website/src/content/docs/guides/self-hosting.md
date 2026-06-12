@@ -51,6 +51,7 @@ docker run --rm -p 8080:8080 opentunnel-relay:dev relay --public-url http://127.
 |---|---|---|
 | `--public-url` | *(required)* | Public origin embedded into the `/cli` bootstrapper. |
 | `--listen` | `:8080` | HTTP listen address. |
+| `--health-listen` | off | Optional second listen address serving `GET /healthz` with the active tunnel count. Keep it private (for example bound to localhost); the count is operational telemetry, not public information. |
 | `--artifact-dir` | `/opentunnel-artifacts` | Directory of CLI artifacts named like `opentunnel-1.0.0-linux-amd64`. |
 | `--version` | build version | Version string used to resolve artifact filenames. |
 

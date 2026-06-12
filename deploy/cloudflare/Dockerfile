@@ -3,4 +3,4 @@
 ARG OPENTUNNEL_VERSION=latest
 FROM ghcr.io/akoenig/opentunnel:${OPENTUNNEL_VERSION}
 
-CMD ["relay", "--listen", ":8080", "--public-url", "https://relay.opentunnel.sh"]
+CMD ["relay", "--listen", ":8080", "--health-listen", ":8081", "--public-url", "https://relay.opentunnel.sh"]

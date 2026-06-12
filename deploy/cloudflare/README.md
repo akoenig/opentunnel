@@ -34,9 +34,11 @@ pnpm deploy
 
 - Requires the Workers Paid plan (Cloudflare Containers) and an API token
   that can edit Workers, containers, and the `opentunnel.sh` zone.
-- The container sleeps after one hour without traffic (`sleepAfter`). A
-  sleeping relay ends its sessions, which the product tolerates by design:
-  hosts simply start a fresh session. The next request wakes the container
+- The container only sleeps when the relay is truly idle: when the
+  `sleepAfter` timer expires, the Worker probes the relay's private health
+  listener (port 8081, reachable only from the Worker, never from the
+  public internet) and refuses to stop the container while tunnels are
+  active. An idle relay scales to zero, and the next request wakes it
   within seconds.
 - The relay logs `relay: active tunnels: N` every 30 seconds; view it with
   `pnpx wrangler tail opentunnel-relay` or in the Cloudflare dashboard.

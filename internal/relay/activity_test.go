@@ -3,6 +3,8 @@ package relay
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -96,4 +98,39 @@ func (w channelWriter) Write(p []byte) (int, error) {
 	default:
 	}
 	return len(p), nil
+}
+
+func TestHealthHandlerReportsActiveTunnels(t *testing.T) {
+	server := NewServer()
+	server.mu.Lock()
+	server.sessions["one"] = &session{hostReserved: true, host: &websocket.Conn{}}
+	server.mu.Unlock()
+
+	recorder := httptest.NewRecorder()
+	server.HealthHandler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("healthz status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+	if got, want := recorder.Body.String(), "active tunnels: 1\n"; got != want {
+		t.Fatalf("healthz body: got %q want %q", got, want)
+	}
+}
+
+func TestHealthHandlerRejectsNonGET(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	NewServer().HealthHandler().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/healthz", nil))
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("healthz POST status: got %d want %d", recorder.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestTunnelHandlerDoesNotServeHealth(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	NewServer().Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("public handler healthz status: got %d want %d", recorder.Code, http.StatusNotFound)
+	}
 }

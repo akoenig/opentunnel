@@ -24,10 +24,11 @@ type command interface {
 }
 
 type relayCommand struct {
-	listen      string
-	publicURL   string
-	artifactDir string
-	version     string
+	listen       string
+	healthListen string
+	publicURL    string
+	artifactDir  string
+	version      string
 }
 
 type createCommand struct {
@@ -78,6 +79,7 @@ func parseRelayArgs(args []string) (relayCommand, error) {
 	flags.SetOutput(io.Discard)
 	cmd := relayCommand{listen: ":8080", artifactDir: "/opentunnel-artifacts", version: buildinfo.Version}
 	flags.StringVar(&cmd.listen, "listen", ":8080", "HTTP listen address")
+	flags.StringVar(&cmd.healthListen, "health-listen", "", "optional private listen address for the /healthz endpoint")
 	flags.StringVar(&cmd.publicURL, "public-url", "", "public relay URL")
 	flags.StringVar(&cmd.artifactDir, "artifact-dir", "/opentunnel-artifacts", "CLI artifact directory")
 	flags.StringVar(&cmd.version, "version", buildinfo.Version, "CLI artifact version")
@@ -176,6 +178,22 @@ func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wri
 	loggingCtx, stopLogging := context.WithCancel(ctx)
 	defer stopLogging()
 	go relayServer.LogActiveTunnels(loggingCtx, relay.ActiveTunnelLogInterval, stderr)
+
+	if cmd.healthListen != "" {
+		healthServer := &http.Server{
+			Addr:              cmd.healthListen,
+			Handler:           relayServer.HealthHandler(),
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		defer func() {
+			_ = healthServer.Shutdown(context.Background())
+		}()
+		go func() {
+			if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				_, _ = fmt.Fprintf(stderr, "health listener: %v\n", err)
+			}
+		}()
+	}
 
 	server := &http.Server{
 		Addr:              cmd.listen,

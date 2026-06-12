@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 )
 
@@ -45,4 +46,25 @@ func (s *Server) LogActiveTunnels(ctx context.Context, interval time.Duration, w
 
 func (s *Server) writeActiveTunnels(writer io.Writer) {
 	_, _ = fmt.Fprintf(writer, "relay: active tunnels: %d\n", s.ActiveTunnels())
+}
+
+// HealthHandler returns a handler serving GET /healthz with the aggregate
+// active tunnel count. The count is operational telemetry, not public
+// information: the handler is deliberately not part of Handler() and is
+// served only when the relay is started with --health-listen, on a separate
+// address that operators keep private.
+func (s *Server) HealthHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = fmt.Fprintf(w, "active tunnels: %d\n", s.ActiveTunnels())
+	})
 }
