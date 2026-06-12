@@ -16,12 +16,12 @@ OpenTunnel gives your AI agent the ability to run commands on a remote machine a
    On the remote machine run:
 
    ```bash
-   curl -fsSL https://opentunnel.sh/create | sh
+   curl -fsSL https://opentunnel.sh | sh
    ```
 
-   This downloads a temporary CLI from the relay, verifies its checksum, and opens one foreground session.
+   This downloads a temporary CLI from the relay, verifies its checksum, and opens one foreground session. The process prints a ready-made prompt for your agent and keeps running. As long as it runs, the tunnel is open; the moment it stops, access is gone.
 
-   The same script also answers directly on the domain for command-line clients, so `curl -fsSL https://opentunnel.sh | sh` is equivalent. Curl it without the pipe first if you want to read it; the script is short and self-documenting. The process prints a ready-made prompt for your agent and keeps running. As long as it runs, the tunnel is open; the moment it stops, access is gone.
+   The domain answers command-line clients directly with a short, self-documenting script. Prefer a more explicit URL? `curl -fsSL https://opentunnel.sh/create | sh` serves the identical script. Curl either URL without the pipe first to read what runs.
 
 2. **Paste the printed prompt into your agent.**
 

@@ -28,7 +28,7 @@ OpenTunnel removes the wall without creating permanent access. You start one for
 **1 · On the remote machine**
 
 ```console
-$ curl -fsSL https://opentunnel.sh/create | sh
+$ curl -fsSL https://opentunnel.sh | sh
 
 I opened an OpenTunnel session for you.
 Session active. Press Ctrl+C to revoke access.

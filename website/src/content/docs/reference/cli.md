@@ -3,14 +3,14 @@ title: CLI Reference
 description: The opentunnel subcommands (create, exec, and relay) and their flags.
 ---
 
-The `opentunnel` binary has three subcommands. In normal use you never install it: the `/cli` bootstrapper downloads a temporary, checksum-verified copy and passes your arguments through, so `curl -fsSL https://opentunnel.sh/create | sh` and `opentunnel create` are equivalent.
+The `opentunnel` binary has three subcommands. In normal use you never install it: the `/cli` bootstrapper downloads a temporary, checksum-verified copy and passes your arguments through, so `curl -fsSL https://opentunnel.sh | sh` and `opentunnel create` are equivalent.
 
 ## `create`
 
 Starts a foreground host session on the current machine and prints the agent prompt.
 
 ```bash
-curl -fsSL https://opentunnel.sh/create | sh
+curl -fsSL https://opentunnel.sh | sh
 ```
 
 | Flag | Default | Purpose |
