@@ -9,6 +9,7 @@ No SSH, no accounts, no standing access. Ctrl+C and it's gone.
 
 [![CI](https://github.com/akoenig/opentunnel/actions/workflows/ci.yml/badge.svg)](https://github.com/akoenig/opentunnel/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/akoenig/opentunnel)](https://github.com/akoenig/opentunnel/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [opentunnel.sh](https://opentunnel.sh) · [Getting Started](https://opentunnel.sh/getting-started/) · [How It Works](https://opentunnel.sh/concepts/how-it-works/) · [Security Model](https://opentunnel.sh/concepts/security-model/) · [Self-Hosting](https://opentunnel.sh/guides/self-hosting/)
 
@@ -101,6 +102,6 @@ CI builds binaries for `linux` and `darwin` on `amd64` and `arm64`, and releases
 
 <div align="center">
 
-Built by <a href="https://andrekoenig.com">André König</a>
+Built by <a href="https://andrekoenig.com">André König</a> · Released under the <a href="LICENSE">MIT License</a>
 
 </div>
