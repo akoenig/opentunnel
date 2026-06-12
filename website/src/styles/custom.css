@@ -42,6 +42,36 @@ pre,
 }
 
 /* ---------------------------------------------------------------------------
+ * Body paragraph typography, adapted from andrekoenig.com:
+ * 16px, line-height 1.65, muted gray. :where() keeps specificity low so
+ * classed paragraphs (ledes, bento text, chat mock) keep their own styling.
+ * ------------------------------------------------------------------------ */
+
+:root[data-theme='light'] {
+	--ot-body-text: #6f6f6f;
+}
+
+:root[data-theme='dark'] {
+	--ot-body-text: #a3a3a3;
+}
+
+.sl-markdown-content :where(p:not([class])) {
+	font-size: 1rem;
+	line-height: 1.65;
+	color: var(--ot-body-text);
+}
+
+/* Footer avatar rendered from the footerText markdown image. */
+[data-slot='footer-text'] img {
+	width: 1.3rem;
+	height: 1.3rem;
+	border-radius: 50%;
+	display: inline-block;
+	vertical-align: -0.35em;
+	border: 1px solid color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
  * Hero headline lockup: large, tight, with the second clause muted.
  * ------------------------------------------------------------------------ */
 
@@ -340,8 +370,9 @@ pre,
 }
 
 .ot-support {
-	color: var(--sl-color-gray-3);
-	line-height: 1.8;
+	color: var(--ot-body-text);
+	font-size: 1rem;
+	line-height: 1.65;
 }
 
 .hero .tagline {
@@ -400,8 +431,8 @@ pre,
 .ot-bento-text {
 	margin: 0 !important;
 	font-size: var(--sl-text-sm);
-	line-height: 1.7;
-	color: var(--muted-foreground, var(--sl-color-gray-3));
+	line-height: 1.65;
+	color: var(--ot-body-text);
 }
 
 .ot-bento-item .expressive-code {

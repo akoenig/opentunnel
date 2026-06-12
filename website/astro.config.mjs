@@ -63,7 +63,7 @@ export default defineConfig({
 					],
 					docs: { includeAiUtilities: true },
 					footerText:
-						'Built by [André König](https://andrekoenig.com). Source on [GitHub](https://github.com/akoenig/opentunnel).',
+						'Built by ![](https://avatars.githubusercontent.com/u/224910?v=4) [André König](https://andrekoenig.com). Source on [GitHub](https://github.com/akoenig/opentunnel).',
 				}),
 			],
 			sidebar: [
