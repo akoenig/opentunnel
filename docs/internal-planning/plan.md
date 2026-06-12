@@ -1467,4 +1467,3 @@ These are intentionally not fully settled yet:
 - Exact encrypted binary frame format, size limits, and sequencing rules. The spec includes the recommended direction, but a short framing spike should validate it before implementation.
 - Final CLI argument names for safe complex command input. Current candidates are `--command-base64` and `--command-file -`; prefer clear agent-readable names over clever abbreviations.
 
-

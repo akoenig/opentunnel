@@ -2,18 +2,18 @@
 
 ## Purpose
 
-Milestone 5 packages the current encrypted tunnel, temporary `/cli` distribution, and foreground session model into a public v1-ready shape. The goal is not to add new product surfaces. The goal is to make the intended v1 experience clear, documented, and verifiable against `plan.md`.
+Milestone 5 packages the current encrypted tunnel, temporary `/cli` distribution, and foreground session model into a public v1-ready shape. The goal is not to add new product surfaces. The goal is to make the intended v1 experience clear, documented, and verifiable against `docs/internal-planning/plan.md`.
 
 ## Scope
 
 In scope:
 
-- Polish the generated `create` prompt so it matches the public agent handoff described in `plan.md`.
+- Polish the generated `create` prompt so it matches the public agent handoff described in `docs/internal-planning/plan.md`.
 - Document self-hosted relay operation.
 - Document `/cli` temporary distribution and cache behavior.
 - Document security and trust boundaries honestly.
 - Document explicit v1 non-goals and deferred capabilities.
-- Add an acceptance mapping from `plan.md` to implemented behavior or explicit deferrals.
+- Add an acceptance mapping from `docs/internal-planning/plan.md` to implemented behavior or explicit deferrals.
 - Verify the public host and client UX with curl-piped `/cli` commands.
 
 Out of scope:
@@ -64,8 +64,8 @@ Add public v1 documentation under `docs/` with these pages:
 
 - `docs/public-v1/self-hosting.md`: how to build and run a self-hosted relay, including `--public-url`, `--artifact-path`, and `--version`.
 - `docs/public-v1/security.md`: trust boundaries, relay blindness, invite bearer-secret handling, same-origin checksum limitations, and what the relay can and cannot see.
-- `docs/public-v1/non-goals.md`: explicit v1 exclusions from `plan.md`.
-- `docs/public-v1/acceptance.md`: acceptance criteria mapped back to `plan.md`, marking implemented behavior and explicit deferrals.
+- `docs/public-v1/non-goals.md`: explicit v1 exclusions from `docs/internal-planning/plan.md`.
+- `docs/public-v1/acceptance.md`: acceptance criteria mapped back to `docs/internal-planning/plan.md`, marking implemented behavior and explicit deferrals.
 
 The docs should avoid claiming that same-origin checksums make `curl | sh` supply-chain secure. They are corruption detection within the relay-origin trust model.
 
@@ -87,7 +87,7 @@ No new relay protocol behavior is required for M5. The existing M4 `/cli`, artif
 
 ### Docs
 
-Docs should describe current behavior precisely. If an item from `plan.md` is not implemented, the acceptance mapping should either mark it deferred or call it out as a gap for a follow-up task. Documentation must not paper over missing behavior.
+Docs should describe current behavior precisely. If an item from `docs/internal-planning/plan.md` is not implemented, the acceptance mapping should either mark it deferred or call it out as a gap for a follow-up task. Documentation must not paper over missing behavior.
 
 ## Error Handling
 
@@ -132,7 +132,7 @@ Milestone 5 is complete when:
 - Public self-hosting documentation exists.
 - Security and trust-boundary documentation exists and avoids strong supply-chain claims.
 - Non-goals are documented.
-- Acceptance mapping to `plan.md` exists.
+- Acceptance mapping to `docs/internal-planning/plan.md` exists.
 - Generated prompt is clear enough to paste into an AI agent and matches the v1 command shape.
 - Public `/cli` create and exec flows are manually verified.
 - Full tests, race tests, vet, tidy diff, and build pass.

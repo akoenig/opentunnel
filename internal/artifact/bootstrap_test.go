@@ -51,6 +51,7 @@ func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 		"${TMPDIR:-/tmp}",
 		"id -u",
 		"cache_base=\"${TMPDIR:-/tmp}/opentunnel-cli-${uid}\"",
+		"# expected_checksum is assigned by the platform case above and scopes the cache by artifact content.",
 		"sha256sum",
 		"shasum -a 256",
 		"chmod 700",

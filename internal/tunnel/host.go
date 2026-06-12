@@ -25,7 +25,14 @@ const (
 	defaultMaxOutputBytes = 10 * 1024 * 1024
 )
 
+const (
+	tunnelRoleHeader    = "OpenTunnel-Role"
+	tunnelSessionHeader = "OpenTunnel-Session"
+)
+
 var errIdleSessionTimeout = errors.New(string(ErrorTypeIdleSessionTimeout))
+
+var errPreCommandClientFailure = errors.New("pre-command client failure")
 
 type HostConfig struct {
 	RelayURL       string
@@ -39,6 +46,20 @@ type HostSession struct {
 	SessionID string
 	Invite    string
 	Done      <-chan error
+}
+
+type hostRuntime struct {
+	conn           *websocket.Conn
+	hostKey        securechannel.HostKeypair
+	clientSecret   [securechannel.ClientSecretSize]byte
+	relay          string
+	sessionID      string
+	commandTimeout time.Duration
+	idleTimeout    time.Duration
+	maxOutputBytes int
+	logger         *hostLogger
+	endpoint       string
+	header         http.Header
 }
 
 func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
@@ -71,59 +92,81 @@ func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
 		return HostSession{}, fmt.Errorf("encode invite: %w", err)
 	}
 
-	conn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(relayURL, "host", sessionID), nil)
+	endpoint := tunnelEndpoint(relayURL)
+	header := tunnelHeader("host", sessionID)
+	conn, _, err := websocket.DefaultDialer.Dial(endpoint, header)
 	if err != nil {
 		return HostSession{}, fmt.Errorf("connect host relay websocket: %w", err)
 	}
 
 	done := make(chan error, 1)
 	logger := hostLogger{writer: cfg.LogWriter}
-	go runHost(ctx, conn, hostKey, clientSecret, relayURL, sessionID, cfg.CommandTimeout, effectiveIdleTimeout(cfg.IdleTimeout), effectiveMaxOutputBytes(cfg.MaxOutputBytes), &logger, done)
+	runtime := hostRuntime{
+		conn:           conn,
+		hostKey:        hostKey,
+		clientSecret:   clientSecret,
+		relay:          relayURL.String(),
+		sessionID:      sessionID,
+		commandTimeout: cfg.CommandTimeout,
+		idleTimeout:    effectiveIdleTimeout(cfg.IdleTimeout),
+		maxOutputBytes: effectiveMaxOutputBytes(cfg.MaxOutputBytes),
+		logger:         &logger,
+		endpoint:       endpoint,
+		header:         header,
+	}
+	go runtime.run(ctx, done)
 
 	return HostSession{SessionID: sessionID, Invite: inviteCode, Done: done}, nil
 }
 
-func runHost(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relayURL *url.URL, sessionID string, commandTimeout time.Duration, idleTimeout time.Duration, maxOutputBytes int, logger *hostLogger, done chan<- error) {
-	logger.log("sessionOpen")
+func (h *hostRuntime) run(ctx context.Context, done chan<- error) {
+	h.logger.log("sessionOpen")
 	defer func() {
-		logger.log("sessionClose")
+		h.logger.log("sessionClose")
 		close(done)
 	}()
 
 	hostCtx, cancelHost := context.WithCancelCause(ctx)
 	defer cancelHost(nil)
-	idleTimer := time.NewTimer(idleTimeout)
+	idleTimer := time.NewTimer(h.idleTimeout)
 	defer idleTimer.Stop()
 	go func() {
 		select {
 		case <-idleTimer.C:
-			logger.log("idleTimeout")
+			h.logger.log("idleTimeout")
 			cancelHost(errIdleSessionTimeout)
 		case <-hostCtx.Done():
 		}
 	}()
 
-	relay := relayURL.String()
-	endpoint := tunnelEndpoint(relayURL, "host", sessionID)
+	conn := h.conn
 	for {
-		logger.log("waiting")
-		if err := handleOneHostConnection(hostCtx, conn, hostKey, clientSecret, relay, sessionID, commandTimeout, maxOutputBytes, logger, func() {
+		h.logger.log("waiting")
+		resetIdle := true
+		if err := handleOneHostConnection(hostCtx, conn, h.hostKey, h.clientSecret, h.relay, h.sessionID, h.commandTimeout, h.maxOutputBytes, h.logger, func() {
 			stopTimer(idleTimer)
 		}); err != nil && ctx.Err() == nil {
 			if errors.Is(context.Cause(hostCtx), errIdleSessionTimeout) {
 				done <- fmt.Errorf("%w: session idle timeout", errIdleSessionTimeout)
 				return
 			}
-			done <- err
-			return
+			if errors.Is(err, errPreCommandClientFailure) {
+				h.logger.log("clientRejected")
+				resetIdle = false
+			} else {
+				done <- err
+				return
+			}
 		}
 		if ctx.Err() != nil {
 			return
 		}
-		resetTimer(idleTimer, idleTimeout)
+		if resetIdle {
+			resetTimer(idleTimer, h.idleTimeout)
+		}
 
 		var err error
-		conn, err = dialHostRelay(hostCtx, endpoint)
+		conn, err = dialHostRelay(hostCtx, h.endpoint, h.header)
 		if err != nil {
 			if errors.Is(context.Cause(hostCtx), errIdleSessionTimeout) {
 				done <- fmt.Errorf("%w: session idle timeout", errIdleSessionTimeout)
@@ -152,9 +195,9 @@ func stopTimer(timer *time.Timer) {
 	}
 }
 
-func dialHostRelay(ctx context.Context, endpoint string) (*websocket.Conn, error) {
+func dialHostRelay(ctx context.Context, endpoint string, header http.Header) (*websocket.Conn, error) {
 	for {
-		conn, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint, nil)
+		conn, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint, header)
 		if err == nil {
 			return conn, nil
 		}
@@ -174,14 +217,14 @@ func dialHostRelay(ctx context.Context, endpoint string) (*websocket.Conn, error
 }
 
 func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration, maxOutputBytes int, logger *hostLogger, stopIdle func()) error {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	connectionDone := make(chan struct{})
 	defer close(connectionDone)
 	go func() {
 		select {
 		case <-ctx.Done():
-			conn.Close()
+			_ = conn.Close()
 		case <-connectionDone:
 		}
 	}()
@@ -192,7 +235,7 @@ func handleOneHostConnection(ctx context.Context, conn *websocket.Conn, hostKey 
 func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securechannel.HostKeypair, clientSecret [securechannel.ClientSecretSize]byte, relay string, sessionID string, commandTimeout time.Duration, maxOutputBytes int, logger *hostLogger, stopIdle func()) error {
 	_, msg1, err := conn.ReadMessage()
 	if err != nil {
-		return fmt.Errorf("read client handshake: %w", err)
+		return fmt.Errorf("%w: read client handshake: %v", errPreCommandClientFailure, err)
 	}
 	logger.log("clientConnected")
 
@@ -202,7 +245,7 @@ func handleOneCommand(ctx context.Context, conn *websocket.Conn, hostKey securec
 	}
 	msg2, channel, err := handshake.ReadMessage(msg1)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: host read handshake: %v", errPreCommandClientFailure, err)
 	}
 	if err := conn.WriteMessage(websocket.BinaryMessage, msg2); err != nil {
 		return fmt.Errorf("write host handshake: %w", err)
@@ -342,14 +385,19 @@ func generateSessionID() (string, error) {
 	return hex.EncodeToString(data[:]), nil
 }
 
-func tunnelEndpoint(relayURL *url.URL, role string, sessionID string) string {
+func tunnelEndpoint(relayURL *url.URL) string {
 	endpoint := *relayURL
 	endpoint.Path = "/tunnel"
-	query := endpoint.Query()
-	query.Set("role", role)
-	query.Set("session", sessionID)
-	endpoint.RawQuery = query.Encode()
+	endpoint.RawQuery = ""
+	endpoint.Fragment = ""
 	return endpoint.String()
+}
+
+func tunnelHeader(role string, sessionID string) http.Header {
+	header := http.Header{}
+	header.Set(tunnelRoleHeader, role)
+	header.Set(tunnelSessionHeader, sessionID)
+	return header
 }
 
 func handshakeConfig(sessionID string, relay string, clientSecret [securechannel.ClientSecretSize]byte) securechannel.HandshakeConfig {
@@ -445,5 +493,5 @@ func (l *hostLogger) log(event string) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	fmt.Fprintf(l.writer, "opentunnel event=%s\n", event)
+	_, _ = fmt.Fprintf(l.writer, "opentunnel event=%s\n", event)
 }

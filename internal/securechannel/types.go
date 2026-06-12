@@ -5,8 +5,6 @@ import "errors"
 const (
 	// PatternNKpsk0 is the Noise NK pattern with PSK in message position 0.
 	PatternNKpsk0 = "Noise_NKpsk0_25519_ChaChaPoly_BLAKE2s"
-	// PatternXXpsk3 is the Noise XX pattern with PSK in message position 3.
-	PatternXXpsk3 = "Noise_XXpsk3_25519_ChaChaPoly_BLAKE2s"
 
 	// SelectedPattern is the Noise pattern used by the secure-channel spike.
 	SelectedPattern = PatternNKpsk0

@@ -36,18 +36,18 @@ func Exec(ctx context.Context, cfg ExecConfig) (ExecResult, error) {
 	if err != nil {
 		return ExecResult{}, err
 	}
-	conn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(relayURL, "client", payload.SessionID), nil)
+	conn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(relayURL), tunnelHeader("client", payload.SessionID))
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("connect client relay websocket: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		select {
 		case <-ctx.Done():
-			conn.Close()
+			_ = conn.Close()
 		case <-done:
 		}
 	}()

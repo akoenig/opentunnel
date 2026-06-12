@@ -36,7 +36,7 @@ func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
 	defer httpServer.Close()
 
 	bootstrapResponse, bootstrapBody := getRelayPath(t, httpServer.URL, "/cli")
-	defer bootstrapResponse.Body.Close()
+	defer closeResponseBody(t, bootstrapResponse)
 	if bootstrapResponse.StatusCode != http.StatusOK {
 		t.Fatalf("bootstrap status mismatch: got %d want %d", bootstrapResponse.StatusCode, http.StatusOK)
 	}
@@ -67,7 +67,7 @@ func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
 		}
 
 		binaryResponse, binaryBody := getRelayPath(t, httpServer.URL, binaryPath)
-		defer binaryResponse.Body.Close()
+		defer closeResponseBody(t, binaryResponse)
 		if binaryResponse.StatusCode != http.StatusOK {
 			t.Fatalf("%s binary status mismatch: got %d want %d", platform, binaryResponse.StatusCode, http.StatusOK)
 		}
@@ -79,7 +79,7 @@ func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
 		}
 
 		checksumResponse, checksumBody := getRelayPath(t, httpServer.URL, checksumPath)
-		defer checksumResponse.Body.Close()
+		defer closeResponseBody(t, checksumResponse)
 		if checksumResponse.StatusCode != http.StatusOK {
 			t.Fatalf("%s checksum status mismatch: got %d want %d", platform, checksumResponse.StatusCode, http.StatusOK)
 		}
@@ -179,7 +179,7 @@ func TestUnknownCLIArtifactPathReturnsNotFound(t *testing.T) {
 		"/cli/bin/extra-file",
 	} {
 		response, _ := getRelayPath(t, httpServer.URL, path)
-		defer response.Body.Close()
+		defer closeResponseBody(t, response)
 		if response.StatusCode != http.StatusNotFound {
 			t.Fatalf("%s status mismatch: got %d want %d", path, response.StatusCode, http.StatusNotFound)
 		}
@@ -192,9 +192,9 @@ func TestClientBinaryMessageReachesHostUnchanged(t *testing.T) {
 	defer httpServer.Close()
 
 	host := dialTunnel(t, httpServer.URL, "host", "s1")
-	defer host.Close()
+	defer closeWebSocket(t, host)
 	client := dialTunnel(t, httpServer.URL, "client", "s1")
-	defer client.Close()
+	defer closeWebSocket(t, client)
 
 	frame := []byte{0, 1, 2, 3, 255, 4}
 	if err := client.WriteMessage(websocket.BinaryMessage, frame); err != nil {
@@ -213,6 +213,162 @@ func TestClientBinaryMessageReachesHostUnchanged(t *testing.T) {
 	}
 }
 
+func TestWebSocketWithOriginIsRejected(t *testing.T) {
+	server := NewServer()
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	header := tunnelHeader("host", "s1")
+	header.Set("Origin", "https://browser.example")
+	conn, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), header)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatalf("expected dial with Origin to fail")
+	}
+	if response == nil {
+		t.Fatalf("expected rejection response")
+	}
+	defer closeResponseBody(t, response)
+	if response.StatusCode == http.StatusSwitchingProtocols {
+		t.Fatalf("expected non-101 rejection response")
+	}
+}
+
+func TestWebSocketWithoutOriginUpgrades(t *testing.T) {
+	server := NewServer()
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	host := dialTunnel(t, httpServer.URL, "host", "s1")
+	defer closeWebSocket(t, host)
+}
+
+func TestSessionCapRejectsNewHostSessions(t *testing.T) {
+	server, err := NewServerWithOptions(ServerOptions{MaxSessions: 1})
+	if err != nil {
+		t.Fatalf("NewServerWithOptions() error = %v", err)
+	}
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	host := dialTunnel(t, httpServer.URL, "host", "s1")
+	defer closeWebSocket(t, host)
+
+	secondHost, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), tunnelHeader("host", "s2"))
+	if err == nil {
+		_ = secondHost.Close()
+		t.Fatalf("expected second host session to fail")
+	}
+	if response == nil {
+		t.Fatalf("expected rejection response")
+	}
+	defer closeResponseBody(t, response)
+	if response.StatusCode == http.StatusSwitchingProtocols {
+		t.Fatalf("expected non-101 rejection response")
+	}
+}
+
+func TestReservationTTLReapsUnattachedHostReservation(t *testing.T) {
+	server, err := NewServerWithOptions(ServerOptions{MaxSessions: 1, ReservationTTL: 10 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("NewServerWithOptions() error = %v", err)
+	}
+	firstHostInUpgrade := make(chan struct{})
+	releaseFirstHost := make(chan struct{})
+	var checkOriginMu sync.Mutex
+	seenFirstHost := false
+	server.upgrader.CheckOrigin = func(r *http.Request) bool {
+		isFirstHost := false
+		checkOriginMu.Lock()
+		if !seenFirstHost && r.Header.Get(tunnelRoleHeader) == "host" {
+			seenFirstHost = true
+			isFirstHost = true
+		}
+		checkOriginMu.Unlock()
+
+		if isFirstHost {
+			close(firstHostInUpgrade)
+			<-releaseFirstHost
+		}
+		return true
+	}
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	firstHostResult := make(chan dialResult, 1)
+	go func() {
+		conn, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), tunnelHeader("host", "s1"))
+		firstHostResult <- dialResult{conn: conn, response: response, err: err}
+	}()
+
+	select {
+	case <-firstHostInUpgrade:
+	case <-time.After(readTimeout):
+		t.Fatalf("timed out waiting for first host upgrade")
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	secondHost := dialTunnel(t, httpServer.URL, "host", "s2")
+	defer closeWebSocket(t, secondHost)
+
+	close(releaseFirstHost)
+	firstHost := receiveDialResult(t, firstHostResult)
+	defer closeWebSocket(t, firstHost.conn)
+}
+
+func TestReapedReservationCannotAttachToReplacementSession(t *testing.T) {
+	server, err := NewServerWithOptions(ServerOptions{ReservationTTL: time.Nanosecond})
+	if err != nil {
+		t.Fatalf("NewServerWithOptions() error = %v", err)
+	}
+
+	staleReservation, ok := server.reserve("host", "s1")
+	if !ok {
+		t.Fatalf("reserve stale host session failed")
+	}
+	staleReservation.reservedAt = time.Now().Add(-time.Second)
+	server.mu.Lock()
+	server.reapExpiredReservationsLocked(time.Now())
+	server.mu.Unlock()
+
+	replacementReservation, ok := server.reserve("host", "s1")
+	if !ok {
+		t.Fatalf("reserve replacement host session failed")
+	}
+	if replacementReservation == staleReservation {
+		t.Fatalf("expected replacement reservation to use a new session")
+	}
+
+	if server.attach("host", "s1", staleReservation, &websocket.Conn{}) {
+		t.Fatalf("expected stale reservation attach to fail")
+	}
+	if replacementReservation.host != nil {
+		t.Fatalf("stale reservation attached to replacement session")
+	}
+}
+
+func TestOversizedFrameIsRejected(t *testing.T) {
+	server, err := NewServerWithOptions(ServerOptions{MaxFrameBytes: 8})
+	if err != nil {
+		t.Fatalf("NewServerWithOptions() error = %v", err)
+	}
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	host := dialTunnel(t, httpServer.URL, "host", "s1")
+	defer closeWebSocket(t, host)
+	client := dialTunnel(t, httpServer.URL, "client", "s1")
+	defer closeWebSocket(t, client)
+
+	if err := client.WriteMessage(websocket.BinaryMessage, []byte("0123456789abcdef")); err != nil {
+		t.Fatalf("client write message: %v", err)
+	}
+	_, _, err = readMessage(t, host)
+	if err == nil {
+		t.Fatalf("expected host read to fail after oversized client frame")
+	}
+}
+
 func TestClientSlotReservedBeforeWebSocketUpgrade(t *testing.T) {
 	server := NewServer()
 	firstClientInUpgrade := make(chan struct{})
@@ -222,7 +378,7 @@ func TestClientSlotReservedBeforeWebSocketUpgrade(t *testing.T) {
 	server.upgrader.CheckOrigin = func(r *http.Request) bool {
 		isFirstClient := false
 		checkOriginMu.Lock()
-		if !seenFirstClient && r.URL.Query().Get("role") == "client" {
+		if !seenFirstClient && r.Header.Get(tunnelRoleHeader) == "client" {
 			seenFirstClient = true
 			isFirstClient = true
 		}
@@ -238,11 +394,11 @@ func TestClientSlotReservedBeforeWebSocketUpgrade(t *testing.T) {
 	defer httpServer.Close()
 
 	host := dialTunnel(t, httpServer.URL, "host", "s1")
-	defer host.Close()
+	defer closeWebSocket(t, host)
 
 	firstClientResult := make(chan dialResult, 1)
 	go func() {
-		conn, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL, "client", "s1"), nil)
+		conn, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), tunnelHeader("client", "s1"))
 		firstClientResult <- dialResult{conn: conn, response: response, err: err}
 	}()
 
@@ -252,9 +408,9 @@ func TestClientSlotReservedBeforeWebSocketUpgrade(t *testing.T) {
 		t.Fatalf("timed out waiting for first client upgrade")
 	}
 
-	secondClient, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL, "client", "s1"), nil)
+	secondClient, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), tunnelHeader("client", "s1"))
 	if err == nil {
-		secondClient.Close()
+		_ = secondClient.Close()
 		close(releaseFirstClient)
 		t.Fatalf("expected second client dial to fail while first client slot is reserved")
 	}
@@ -262,7 +418,7 @@ func TestClientSlotReservedBeforeWebSocketUpgrade(t *testing.T) {
 		close(releaseFirstClient)
 		t.Fatalf("expected rejection response")
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(t, response)
 	if response.StatusCode == http.StatusSwitchingProtocols {
 		close(releaseFirstClient)
 		t.Fatalf("expected non-101 rejection response")
@@ -270,7 +426,7 @@ func TestClientSlotReservedBeforeWebSocketUpgrade(t *testing.T) {
 
 	close(releaseFirstClient)
 	firstClient := receiveDialResult(t, firstClientResult)
-	defer firstClient.conn.Close()
+	defer closeWebSocket(t, firstClient.conn)
 }
 
 func TestSecondClientForSameSessionIsRejected(t *testing.T) {
@@ -279,18 +435,18 @@ func TestSecondClientForSameSessionIsRejected(t *testing.T) {
 	defer httpServer.Close()
 
 	host := dialTunnel(t, httpServer.URL, "host", "s1")
-	defer host.Close()
+	defer closeWebSocket(t, host)
 	client := dialTunnel(t, httpServer.URL, "client", "s1")
-	defer client.Close()
+	defer closeWebSocket(t, client)
 
-	_, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL, "client", "s1"), nil)
+	_, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), tunnelHeader("client", "s1"))
 	if err == nil {
 		t.Fatalf("expected second client dial to fail")
 	}
 	if response == nil {
 		t.Fatalf("expected rejection response")
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(t, response)
 	if response.StatusCode == http.StatusSwitchingProtocols {
 		t.Fatalf("expected non-101 rejection response")
 	}
@@ -312,14 +468,14 @@ func TestClientDisconnectClosesHostAndRemovesSession(t *testing.T) {
 		t.Fatalf("expected host read to fail after paired client disconnect")
 	}
 
-	_, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL, "client", "s1"), nil)
+	_, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), tunnelHeader("client", "s1"))
 	if err == nil {
 		t.Fatalf("expected new client without a new host to fail")
 	}
 	if response == nil {
 		t.Fatalf("expected rejection response")
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(t, response)
 	if response.StatusCode == http.StatusSwitchingProtocols {
 		t.Fatalf("expected non-101 rejection response")
 	}
@@ -350,14 +506,14 @@ func TestClientBeforeHostIsRejected(t *testing.T) {
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
-	_, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL, "client", "s1"), nil)
+	_, response, err := websocket.DefaultDialer.Dial(tunnelURL(httpServer.URL), tunnelHeader("client", "s1"))
 	if err == nil {
 		t.Fatalf("expected client-before-host dial to fail")
 	}
 	if response == nil {
 		t.Fatalf("expected rejection response")
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(t, response)
 	if response.StatusCode == http.StatusSwitchingProtocols {
 		t.Fatalf("expected non-101 rejection response")
 	}
@@ -366,10 +522,10 @@ func TestClientBeforeHostIsRejected(t *testing.T) {
 func dialTunnel(t *testing.T, serverURL, role, session string) *websocket.Conn {
 	t.Helper()
 
-	conn, response, err := websocket.DefaultDialer.Dial(tunnelURL(serverURL, role, session), nil)
+	conn, response, err := websocket.DefaultDialer.Dial(tunnelURL(serverURL), tunnelHeader(role, session))
 	if err != nil {
 		if response != nil {
-			defer response.Body.Close()
+			defer closeResponseBody(t, response)
 			t.Fatalf("dial %s: %v status=%s", role, err, response.Status)
 		}
 		t.Fatalf("dial %s: %v", role, err)
@@ -390,7 +546,7 @@ func receiveDialResult(t *testing.T, results <-chan dialResult) dialResult {
 	case result := <-results:
 		if result.err != nil {
 			if result.response != nil {
-				defer result.response.Body.Close()
+				defer closeResponseBody(t, result.response)
 				t.Fatalf("dial: %v status=%s", result.err, result.response.Status)
 			}
 			t.Fatalf("dial: %v", result.err)
@@ -441,12 +597,33 @@ func getRelayPath(t *testing.T, serverURL, path string) (*http.Response, []byte)
 	}
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		response.Body.Close()
+		_ = response.Body.Close()
 		t.Fatalf("read %s body: %v", path, err)
 	}
 	return response, body
 }
 
-func tunnelURL(serverURL, role, session string) string {
-	return "ws" + strings.TrimPrefix(serverURL, "http") + "/tunnel?role=" + role + "&session=" + session
+func closeResponseBody(t *testing.T, response *http.Response) {
+	t.Helper()
+	if err := response.Body.Close(); err != nil {
+		t.Fatalf("close response body: %v", err)
+	}
+}
+
+func closeWebSocket(t *testing.T, conn *websocket.Conn) {
+	t.Helper()
+	if err := conn.Close(); err != nil {
+		t.Fatalf("close websocket: %v", err)
+	}
+}
+
+func tunnelURL(serverURL string) string {
+	return "ws" + strings.TrimPrefix(serverURL, "http") + "/tunnel"
+}
+
+func tunnelHeader(role, session string) http.Header {
+	header := http.Header{}
+	header.Set(tunnelRoleHeader, role)
+	header.Set(tunnelSessionHeader, session)
+	return header
 }

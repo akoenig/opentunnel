@@ -44,12 +44,13 @@ curl -fsSL http://127.0.0.1:8080/cli | sh -s -- create
 The host prints an agent prompt containing commands like:
 
 ```bash
-curl -fsSL https://relay.example.com/cli | sh -s -- exec \
-  --invite '<invite>' \
+curl -fsSL https://relay.example.com/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
   -- '<COMMAND>'
 ```
 
 The invite is bearer-secret material. Anyone with a valid invite can attempt to connect while the foreground host session is active.
+
+The generated prompt uses `OPENTUNNEL_INVITE` to keep the invite out of argv, process command lines, and basic `ps` output for the long-lived `opentunnel exec` process. The variable is still inherited by that process and may be visible through process-environment inspection on shared systems. Use `--invite-stdin` for stronger local secrecy, or shell-history controls when typing environment assignments.
 
 ## Verification
 

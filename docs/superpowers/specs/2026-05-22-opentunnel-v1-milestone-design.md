@@ -2,15 +2,15 @@
 
 ## Purpose
 
-This companion spec turns `plan.md` into a workable delivery sequence. It does not replace the product, security, UX, or non-goal decisions in `plan.md`. It defines what to build first, what each phase must prove, and which later concerns must stay out of earlier milestones.
+This companion spec turns `docs/internal-planning/plan.md` into a workable delivery sequence. It does not replace the product, security, UX, or non-goal decisions in `docs/internal-planning/plan.md`. It defines what to build first, what each phase must prove, and which later concerns must stay out of earlier milestones.
 
 The goal is to avoid boiling the ocean while still protecting the core OpenTunnel product invariant: ephemeral, relay-routed, end-to-end encrypted remote command execution for AI agents.
 
-## Relationship To `plan.md`
+## Relationship To `docs/internal-planning/plan.md`
 
-`plan.md` remains the canonical product north star. This document is an execution lens over that plan.
+`docs/internal-planning/plan.md` remains the canonical product north star. This document is an execution lens over that plan.
 
-If this document and `plan.md` disagree about product behavior, privacy guarantees, public UX, or non-goals, `plan.md` wins unless the discrepancy is explicitly reviewed and accepted.
+If this document and `docs/internal-planning/plan.md` disagree about product behavior, privacy guarantees, public UX, or non-goals, `docs/internal-planning/plan.md` wins unless the discrepancy is explicitly reviewed and accepted.
 
 Temporary developer affordances described here, such as `opentunnel create --relay http://localhost:8080`, are milestone tooling only. They are not part of the intended public v1 UX, which remains:
 
@@ -219,7 +219,7 @@ This milestone passes only when:
 
 ### Purpose
 
-Package, document, and validate the public v1 release against `plan.md`.
+Package, document, and validate the public v1 release against `docs/internal-planning/plan.md`.
 
 ### In Scope
 
@@ -228,7 +228,7 @@ Package, document, and validate the public v1 release against `plan.md`.
 - Generated agent prompt polish.
 - Security and trust-boundary documentation.
 - Non-goal documentation.
-- Final acceptance criteria mapped back to `plan.md`.
+- Final acceptance criteria mapped back to `docs/internal-planning/plan.md`.
 
 ### Out Of Scope
 
@@ -246,7 +246,7 @@ Package, document, and validate the public v1 release against `plan.md`.
 
 This milestone passes only when:
 
-- Full `plan.md` acceptance criteria are satisfied or explicitly deferred.
+- Full `docs/internal-planning/plan.md` acceptance criteria are satisfied or explicitly deferred.
 - Documentation states trust boundaries honestly.
 - Self-hosting works.
 - The generated agent prompt is clear about bearer-secret invite material and command execution without per-command approval.
@@ -261,7 +261,7 @@ This milestone passes only when:
 - Do not send the full invite code, `clientSecret`, command text, output, exit code, host metadata, or client identity to the relay as plaintext application data.
 - If the Noise spike fails, stop and revisit protocol or library choice before broader implementation.
 - Keep `/cli` supply-chain messaging honest: same-origin checksums detect corruption, not malicious origin compromise.
-- Preserve `plan.md` non-goals unless an explicit re-scope decision is made.
+- Preserve `docs/internal-planning/plan.md` non-goals unless an explicit re-scope decision is made.
 
 ## Explicit Non-Goals For This Milestone Plan
 
@@ -295,4 +295,4 @@ This milestone plan does not add or re-scope:
 | Local Binary Vertical Slice | Can local binaries execute one remote command through a relay-blind encrypted tunnel? |
 | Lifecycle And Safety Hardening | Does the tunnel behave like temporary supervised access with clear limits and cleanup? |
 | Temporary `/cli` Distribution | Does the public zero-install UX work without hiding its trust boundary? |
-| Public V1 Readiness | Is the release deployable, documented, and aligned with `plan.md`? |
+| Public V1 Readiness | Is the release deployable, documented, and aligned with `docs/internal-planning/plan.md`? |
