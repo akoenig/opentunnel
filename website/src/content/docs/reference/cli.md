@@ -24,16 +24,17 @@ The session stays open until Ctrl+C, idle timeout, relay failure, or process exi
 Connects to an active session and runs one command. This is the command your agent uses.
 
 ```bash
-curl -fsSL https://opentunnel.sh/cli | sh -s -- exec \
-  --invite '<invite>' \
+curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
   -- 'hostname && uname -a'
 ```
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--invite` | *(required)* | Invite printed by `create`. Contains everything needed to connect, including the relay origin. |
+| `OPENTUNNEL_INVITE` | preferred | Environment variable carrying the invite printed by `create`. Keeps the bearer secret out of process command lines. |
+| `--invite-stdin` | off | Read the invite from stdin for stronger local secrecy. |
+| `--invite` | supported | Pass the invite as a flag. Compatible but places the secret in process argv; prefer the alternatives above. |
 
-Everything after `--` is the command to execute on the host. Remote stdout and stderr stream to the local stdout and stderr, and `exec` exits with the remote command's exit code, which is what lets agents treat it like a local tool call.
+The invite contains everything needed to connect, including the relay origin. Everything after `--` is the command to execute on the host. Remote stdout and stderr stream to the local stdout and stderr, and `exec` exits with the remote command's exit code, which is what lets agents treat it like a local tool call.
 
 Commands must be non-interactive: no PTY, no stdin. One client and one command run at a time.
 

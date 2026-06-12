@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make OpenTunnel public-v1 ready by polishing the generated agent prompt, adding self-hosting and security documentation, mapping acceptance criteria to `plan.md`, and verifying the public `/cli` create/exec flow.
+**Goal:** Make OpenTunnel public-v1 ready by polishing the generated agent prompt, adding self-hosting and security documentation, mapping acceptance criteria to `docs/internal-planning/plan.md`, and verifying the public `/cli` create/exec flow.
 
 **Architecture:** Keep product behavior minimal and centered on the existing foreground `create`, one-off `exec`, opaque relay, and `/cli` bootstrapper. Add no new protocol surface; M5 changes should be prompt text, documentation, and verification only unless tests expose a small public-UX gap.
 
@@ -12,12 +12,12 @@
 
 ## File Structure
 
-- Modify `cmd/opentunnel/main.go`: replace the terse `writeCreateReady` output with the public v1 prompt described in `plan.md`.
+- Modify `cmd/opentunnel/main.go`: replace the terse `writeCreateReady` output with the public v1 prompt described in `docs/internal-planning/plan.md`.
 - Modify `cmd/opentunnel/main_test.go`: add prompt tests for the public template, suggested first command, bearer-secret warning, notes, and absence of user-facing `--relay`.
 - Create `docs/public-v1/self-hosting.md`: relay build/run guidance and artifact flag explanation.
 - Create `docs/public-v1/security.md`: trust boundaries, relay blindness, invite handling, same-origin checksum limitation.
 - Create `docs/public-v1/non-goals.md`: explicit v1 exclusions.
-- Create `docs/public-v1/acceptance.md`: `plan.md` acceptance mapping.
+- Create `docs/public-v1/acceptance.md`: `docs/internal-planning/plan.md` acceptance mapping.
 - Commit after each task.
 
 ## Task 1: Polish Generated Agent Prompt
@@ -358,7 +358,7 @@ Create `docs/public-v1/acceptance.md` with:
 ```markdown
 # OpenTunnel Public V1 Acceptance Mapping
 
-This document maps `plan.md` public v1 requirements to the current implementation state.
+This document maps `docs/internal-planning/plan.md` public v1 requirements to the current implementation state.
 
 ## Public UX
 

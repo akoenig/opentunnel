@@ -39,6 +39,8 @@ Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-rel
 
 TLS is normally terminated by a reverse proxy or load balancer in front of the relay.
 
+For `/tunnel` WebSockets, proxies and load balancers must preserve `OpenTunnel-Role` and `OpenTunnel-Session` headers. Proxies and WAFs must not inject an `Origin` header into CLI tunnel requests because the relay rejects non-empty `Origin`.
+
 ## Release Command
 
 Use the opencode slash command for normal releases:
@@ -92,7 +94,7 @@ Use the manual release process below as a fallback when debugging or recovering 
 13. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-linux-arm64` and `/cli/bin/opentunnel-1.0.0-linux-arm64.sha256`.
 14. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-amd64` and `/cli/bin/opentunnel-1.0.0-darwin-amd64.sha256`.
 15. Verify each artifact plus checksum: `/cli/bin/opentunnel-1.0.0-darwin-arm64` and `/cli/bin/opentunnel-1.0.0-darwin-arm64.sha256`.
-16. Verify the public flow: `curl -fsSL https://relay.example.com/cli | sh -s -- create`, then run the generated `exec` command.
+16. Verify the public flow: `curl -fsSL https://relay.example.com/cli | sh -s -- create`, then run the generated `curl -fsSL https://relay.example.com/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec -- '<COMMAND>'` command.
 
 Artifact filenames are derived from `VERSION`. Development builds with `VERSION=dev` produce `/cli/bin/opentunnel-dev-*` paths instead of `opentunnel-1.0.0-*` paths. Prefer immutable GHCR version tags for production; `latest` is mutable.
 

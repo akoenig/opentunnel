@@ -4,7 +4,11 @@ package command
 
 import "os/exec"
 
+// OpenTunnel's command cancellation relies on Unix process groups. Release
+// targets are linux and darwin; non-unix builds fail instead of silently
+// degrading child-process cleanup.
+var _ = unsupportedNonUnixOpenTunnelBuild
+
 func configureCommandCleanup(cmd *exec.Cmd) {
-	// Process-group cleanup is unsupported by this fallback for M3.
-	// exec.CommandContext still terminates the direct child process.
+	_ = cmd
 }

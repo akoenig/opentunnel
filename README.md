@@ -41,12 +41,11 @@ A temporary CLI is downloaded, checksum-verified, and opens one foreground sessi
 Paste the printed prompt. Your agent now has a remote shell as a tool and runs commands like this on its own:
 
 ```bash
-curl -fsSL https://opentunnel.sh/cli | sh -s -- exec \
-  --invite '<invite>' \
+curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
   -- 'systemctl restart caddy'
 ```
 
-Remote stdout and stderr stream back, and `exec` exits with the remote command's exit code. To the agent, the remote machine feels local.
+Remote stdout and stderr stream back, and `exec` exits with the remote command's exit code. To the agent, the remote machine feels local. The invite travels in `OPENTUNNEL_INVITE` to keep it out of process command lines; `--invite-stdin` is available for stronger local secrecy.
 
 **3 · Press Ctrl+C when you're done**
 

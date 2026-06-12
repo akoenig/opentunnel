@@ -28,6 +28,8 @@ docker run -p 8080:8080 opentunnel-relay:dev relay --public-url https://relay.ex
 
 Terminate TLS in front of the relay with your normal reverse proxy or load balancer. The relay process expects the public origin to be HTTP or HTTPS and does not require a database or Redis.
 
+For `/tunnel` WebSockets, proxies and load balancers must preserve `OpenTunnel-Role` and `OpenTunnel-Session` headers. Proxies and WAFs must not inject an `Origin` header into CLI tunnel requests because the relay rejects non-empty `Origin`.
+
 ## Public Host Command
 
 Users start a foreground host session with:
@@ -43,8 +45,7 @@ The session stays open until Ctrl+C, idle timeout, relay failure, or process exi
 The host prints an agent prompt containing commands like:
 
 ```bash
-curl -fsSL https://relay.example.com/cli | sh -s -- exec \
-  --invite '<invite>' \
+curl -fsSL https://relay.example.com/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
   -- '<COMMAND>'
 ```
 

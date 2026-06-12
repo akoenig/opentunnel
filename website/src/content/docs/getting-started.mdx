@@ -30,8 +30,7 @@ OpenTunnel gives your AI agent the ability to run commands on a remote machine a
 
    Run commands on my host with:
 
-   curl -fsSL https://opentunnel.sh/cli | sh -s -- exec \
-     --invite '<invite>' \
+   curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
      -- '<COMMAND>'
    ```
 

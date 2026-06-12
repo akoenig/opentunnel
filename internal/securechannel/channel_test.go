@@ -3,10 +3,7 @@ package securechannel
 import (
 	"bytes"
 	"crypto/rand"
-	"errors"
 	"testing"
-
-	"github.com/flynn/noise"
 )
 
 func TestNKpsk0HandshakeEncryptsMultipleFrames(t *testing.T) {
@@ -16,9 +13,9 @@ func TestNKpsk0HandshakeEncryptsMultipleFrames(t *testing.T) {
 		t.Fatalf("GenerateHostKeypair: %v", err)
 	}
 
-	client, host, err := EstablishChannelWithHostKey(cfg, hostKey, hostKey.Public)
+	client, host, err := testSplitChannels(t, cfg, cfg, hostKey, hostKey.Public)
 	if err != nil {
-		t.Fatalf("EstablishChannelWithHostKey: %v", err)
+		t.Fatalf("testSplitChannels: %v", err)
 	}
 
 	frames := [][]byte{
@@ -70,26 +67,9 @@ func TestSplitNKpsk0HandshakeMatchesInMemoryChannel(t *testing.T) {
 		t.Fatalf("GenerateHostKeypair: %v", err)
 	}
 
-	clientHS, err := NewClientHandshake(cfg, hostKey.Public)
+	client, host, err := testSplitChannels(t, cfg, cfg, hostKey, hostKey.Public)
 	if err != nil {
-		t.Fatalf("NewClientHandshake: %v", err)
-	}
-	hostHS, err := NewHostHandshake(cfg, hostKey)
-	if err != nil {
-		t.Fatalf("NewHostHandshake: %v", err)
-	}
-
-	msg1, err := clientHS.WriteMessage()
-	if err != nil {
-		t.Fatalf("client write message: %v", err)
-	}
-	msg2, host, err := hostHS.ReadMessage(msg1)
-	if err != nil {
-		t.Fatalf("host read message: %v", err)
-	}
-	client, err := clientHS.ReadMessage(msg2)
-	if err != nil {
-		t.Fatalf("client read message: %v", err)
+		t.Fatalf("testSplitChannels: %v", err)
 	}
 
 	frame := []byte("commandRequest:hostname")
@@ -129,7 +109,7 @@ func TestHandshakeFailsWithWrongClientSecret(t *testing.T) {
 
 	clientCfg.ClientSecret[0] ^= 0xff
 
-	_, _, err = establishNKpsk0WithConfigs(clientCfg, hostCfg, hostKey.private, hostKey.Public)
+	_, _, err = testSplitChannels(t, clientCfg, hostCfg, hostKey, hostKey.Public)
 	if err == nil {
 		t.Fatalf("expected wrong client secret to fail")
 	}
@@ -146,12 +126,20 @@ func TestHandshakeFailsWithWrongHostPublicKey(t *testing.T) {
 		t.Fatalf("GenerateHostKeypair other: %v", err)
 	}
 
-	_, _, err = establishNKpsk0(cfg, hostKey.private, otherHostKey.Public)
-	if err == nil {
-		t.Fatalf("expected wrong host public key to fail")
+	clientHS, err := NewClientHandshake(cfg, otherHostKey.Public)
+	if err != nil {
+		t.Fatalf("NewClientHandshake: %v", err)
 	}
-	if !errors.Is(err, ErrHostKeyMismatch) {
-		t.Fatalf("expected ErrHostKeyMismatch, got %v", err)
+	hostHS, err := NewHostHandshake(cfg, hostKey)
+	if err != nil {
+		t.Fatalf("NewHostHandshake: %v", err)
+	}
+	msg1, err := clientHS.WriteMessage()
+	if err != nil {
+		t.Fatalf("client write message: %v", err)
+	}
+	if _, _, err := hostHS.ReadMessage(msg1); err == nil {
+		t.Fatal("expected wrong host public key to fail")
 	}
 }
 
@@ -165,7 +153,7 @@ func TestHandshakeFailsWithWrongPrologue(t *testing.T) {
 		t.Fatalf("GenerateHostKeypair: %v", err)
 	}
 
-	_, _, err = establishNKpsk0WithConfigs(clientCfg, hostCfg, hostKey.private, hostKey.Public)
+	_, _, err = testSplitChannels(t, clientCfg, hostCfg, hostKey, hostKey.Public)
 	if err == nil {
 		t.Fatalf("expected wrong prologue to fail")
 	}
@@ -178,9 +166,9 @@ func TestDecryptRejectsReplayedCiphertext(t *testing.T) {
 		t.Fatalf("GenerateHostKeypair: %v", err)
 	}
 
-	client, host, err := EstablishChannelWithHostKey(cfg, hostKey, hostKey.Public)
+	client, host, err := testSplitChannels(t, cfg, cfg, hostKey, hostKey.Public)
 	if err != nil {
-		t.Fatalf("EstablishChannelWithHostKey: %v", err)
+		t.Fatalf("testSplitChannels: %v", err)
 	}
 
 	ciphertext, err := client.Encrypt([]byte("stdoutData:first"))
@@ -204,9 +192,9 @@ func TestDecryptRejectsMalformedCiphertext(t *testing.T) {
 		t.Fatalf("GenerateHostKeypair: %v", err)
 	}
 
-	client, host, err := EstablishChannelWithHostKey(cfg, hostKey, hostKey.Public)
+	client, host, err := testSplitChannels(t, cfg, cfg, hostKey, hostKey.Public)
 	if err != nil {
-		t.Fatalf("EstablishChannelWithHostKey: %v", err)
+		t.Fatalf("testSplitChannels: %v", err)
 	}
 
 	if _, err := host.Decrypt([]byte("not a valid noise ciphertext")); err == nil {
@@ -225,23 +213,30 @@ func TestDecryptRejectsMalformedCiphertext(t *testing.T) {
 	}
 }
 
-func TestXXpsk3PatternIsAvailableForFallbackEvaluation(t *testing.T) {
-	if noise.HandshakeXX.Name != "XX" {
-		t.Fatalf("noise.HandshakeXX is not available")
-	}
+func testSplitChannels(t *testing.T, clientCfg HandshakeConfig, hostCfg HandshakeConfig, hostKey HostKeypair, expectedHostPublic []byte) (*Channel, *Channel, error) {
+	t.Helper()
 
-	cfg := noise.Config{
-		CipherSuite:           noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s),
-		Pattern:               noise.HandshakeXX,
-		Initiator:             true,
-		Prologue:              []byte("OpenTunnel XXpsk3 availability check"),
-		PresharedKey:          bytes.Repeat([]byte{7}, ClientSecretSize),
-		PresharedKeyPlacement: 3,
+	clientHS, err := NewClientHandshake(clientCfg, expectedHostPublic)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	if _, err := noise.NewHandshakeState(cfg); err != nil {
-		t.Fatalf("XXpsk3 handshake state should be constructible: %v", err)
+	hostHS, err := NewHostHandshake(hostCfg, hostKey)
+	if err != nil {
+		return nil, nil, err
 	}
+	msg1, err := clientHS.WriteMessage()
+	if err != nil {
+		return nil, nil, err
+	}
+	msg2, host, err := hostHS.ReadMessage(msg1)
+	if err != nil {
+		return nil, nil, err
+	}
+	client, err := clientHS.ReadMessage(msg2)
+	if err != nil {
+		return nil, nil, err
+	}
+	return client, host, nil
 }
 
 func testHandshakeConfig(t *testing.T) HandshakeConfig {

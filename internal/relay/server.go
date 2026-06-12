@@ -6,18 +6,31 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"opentunnel/internal/artifact"
 
 	"github.com/gorilla/websocket"
 )
 
+const (
+	tunnelRoleHeader    = "OpenTunnel-Role"
+	tunnelSessionHeader = "OpenTunnel-Session"
+
+	defaultMaxSessions          = 1024
+	defaultReservationTTL       = 30 * time.Second
+	defaultMaxFrameBytes  int64 = 1 * 1024 * 1024
+)
+
 // Server routes opaque websocket tunnel frames between one host and one client per session.
 type Server struct {
-	mu           sync.Mutex
-	sessions     map[string]*session
-	upgrader     websocket.Upgrader
-	cliArtifacts *CLIArtifacts
+	mu             sync.Mutex
+	sessions       map[string]*session
+	maxSessions    int
+	reservationTTL time.Duration
+	maxFrameBytes  int64
+	upgrader       websocket.Upgrader
+	cliArtifacts   *CLIArtifacts
 }
 
 // CLIArtifact configures one optional CLI artifact response served by the relay.
@@ -36,9 +49,12 @@ type CLIArtifacts struct {
 
 // ServerOptions configures a relay server with plan-defined options.
 type ServerOptions struct {
-	PublicURL   string
-	Version     string
-	ArtifactDir string
+	PublicURL      string
+	Version        string
+	ArtifactDir    string
+	MaxSessions    int
+	ReservationTTL time.Duration
+	MaxFrameBytes  int64
 }
 
 type session struct {
@@ -46,16 +62,17 @@ type session struct {
 	client         *websocket.Conn
 	hostReserved   bool
 	clientReserved bool
+	reservedAt     time.Time
 }
 
 // NewServer creates an in-memory relay server.
 func NewServer() *Server {
-	return newServer()
+	return newServer(ServerOptions{})
 }
 
 // NewServerWithOptions creates an in-memory relay server from explicit options.
 func NewServerWithOptions(options ServerOptions) (*Server, error) {
-	server := newServer()
+	server := newServer(options)
 	if options.PublicURL == "" && options.Version == "" && options.ArtifactDir == "" {
 		return server, nil
 	}
@@ -107,15 +124,39 @@ func loadCLIArtifacts(relayOrigin, version, artifactDir string) (*CLIArtifacts, 
 	return &artifacts, nil
 }
 
-func newServer() *Server {
+func newServer(options ServerOptions) *Server {
 	return &Server{
-		sessions: make(map[string]*session),
+		sessions:       make(map[string]*session),
+		maxSessions:    effectiveMaxSessions(options.MaxSessions),
+		reservationTTL: effectiveReservationTTL(options.ReservationTTL),
+		maxFrameBytes:  effectiveMaxFrameBytes(options.MaxFrameBytes),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				return true
+				return r.Header.Get("Origin") == ""
 			},
 		},
 	}
+}
+
+func effectiveMaxSessions(value int) int {
+	if value == 0 {
+		return defaultMaxSessions
+	}
+	return value
+}
+
+func effectiveReservationTTL(value time.Duration) time.Duration {
+	if value == 0 {
+		return defaultReservationTTL
+	}
+	return value
+}
+
+func effectiveMaxFrameBytes(value int64) int64 {
+	if value == 0 {
+		return defaultMaxFrameBytes
+	}
+	return value
 }
 
 // Handler returns the HTTP handler for the relay tunnel endpoint.
@@ -130,23 +171,28 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 
-		role := r.URL.Query().Get("role")
-		sessionID := r.URL.Query().Get("session")
+		role := r.Header.Get(tunnelRoleHeader)
+		sessionID := r.Header.Get(tunnelSessionHeader)
 		if sessionID == "" || (role != "host" && role != "client") {
 			http.Error(w, "invalid tunnel request", http.StatusBadRequest)
 			return
 		}
-		if !s.reserve(role, sessionID) {
+		reservation, ok := s.reserve(role, sessionID)
+		if !ok {
 			http.Error(w, "session endpoint unavailable", http.StatusConflict)
 			return
 		}
 
 		conn, err := s.upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			s.release(role, sessionID)
+			s.release(role, sessionID, reservation)
 			return
 		}
-		s.attach(role, sessionID, conn)
+		conn.SetReadLimit(s.maxFrameBytes)
+		if !s.attach(role, sessionID, reservation, conn) {
+			_ = conn.Close()
+			return
+		}
 
 		s.forward(role, sessionID, conn)
 	})
@@ -175,7 +221,7 @@ func (s *Server) handleCLIArtifact(w http.ResponseWriter, r *http.Request) bool 
 		}
 		if r.URL.Path == binaryPath+".sha256" {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			fmt.Fprintln(w, cliArtifact.Checksum)
+			_, _ = fmt.Fprintln(w, cliArtifact.Checksum)
 			return true
 		}
 	}
@@ -204,7 +250,7 @@ func (s *Server) serveBootstrap(w http.ResponseWriter) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
-	fmt.Fprint(w, script)
+	_, _ = fmt.Fprint(w, script)
 }
 
 func (s *Server) serveBinary(w http.ResponseWriter, cliArtifact CLIArtifact) {
@@ -214,51 +260,69 @@ func (s *Server) serveBinary(w http.ResponseWriter, cliArtifact CLIArtifact) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(contents)
+	_, _ = w.Write(contents)
 }
 
 func cliArtifactURLPath(version, platform string) string {
 	return "/cli/bin/opentunnel-" + version + "-" + platform
 }
 
-func (s *Server) reserve(role, sessionID string) bool {
+func (s *Server) reserve(role, sessionID string) (*session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := time.Now()
+	s.reapExpiredReservationsLocked(now)
 
 	if role == "host" {
 		tunnelSession := s.sessions[sessionID]
 		if tunnelSession != nil && tunnelSession.hostReserved {
-			return false
+			return nil, false
 		}
 		if tunnelSession == nil {
+			if len(s.sessions) >= s.maxSessions {
+				return nil, false
+			}
 			tunnelSession = &session{}
 			s.sessions[sessionID] = tunnelSession
 		}
 		tunnelSession.hostReserved = true
-		return true
+		tunnelSession.reservedAt = now
+		return tunnelSession, true
 	}
 
 	tunnelSession := s.sessions[sessionID]
 	if tunnelSession == nil || !tunnelSession.hostReserved || tunnelSession.clientReserved {
-		return false
+		return nil, false
 	}
 	tunnelSession.clientReserved = true
-	return true
+	return tunnelSession, true
 }
 
-func (s *Server) attach(role, sessionID string, conn *websocket.Conn) {
+func (s *Server) reapExpiredReservationsLocked(now time.Time) {
+	if s.reservationTTL <= 0 {
+		return
+	}
+	for sessionID, tunnelSession := range s.sessions {
+		if tunnelSession.host == nil && tunnelSession.client == nil && tunnelSession.hostReserved && !tunnelSession.clientReserved && now.Sub(tunnelSession.reservedAt) > s.reservationTTL {
+			delete(s.sessions, sessionID)
+		}
+	}
+}
+
+func (s *Server) attach(role, sessionID string, expected *session, conn *websocket.Conn) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	tunnelSession := s.sessions[sessionID]
-	if tunnelSession == nil {
-		return
+	if tunnelSession == nil || tunnelSession != expected {
+		return false
 	}
 	if role == "host" {
 		tunnelSession.host = conn
-		return
+		return true
 	}
 	tunnelSession.client = conn
+	return true
 }
 
 func (s *Server) forward(role, sessionID string, conn *websocket.Conn) {
@@ -302,18 +366,18 @@ func (s *Server) peer(role, sessionID string, conn *websocket.Conn) *websocket.C
 
 func (s *Server) disconnect(role, sessionID string, conn *websocket.Conn) {
 	peer := s.releaseConnection(role, sessionID, conn)
-	conn.Close()
+	_ = conn.Close()
 	if peer != nil {
-		peer.Close()
+		_ = peer.Close()
 	}
 }
 
-func (s *Server) release(role, sessionID string) {
+func (s *Server) release(role, sessionID string, expected *session) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	tunnelSession := s.sessions[sessionID]
-	if tunnelSession == nil {
+	if tunnelSession == nil || tunnelSession != expected {
 		return
 	}
 	if role == "host" {

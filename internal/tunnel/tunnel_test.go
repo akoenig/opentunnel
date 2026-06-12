@@ -124,6 +124,71 @@ func TestStartHostSessionRunsSequentialExecsWithSameInvite(t *testing.T) {
 	}
 }
 
+func TestRogueClientHandshakeFailureDoesNotStopHostSession(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{RelayURL: relayURL(server.URL)})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	payload, err := invite.Decode(session.Invite)
+	if err != nil {
+		t.Fatalf("decode invite: %v", err)
+	}
+	parsedRelayURL, err := parseRelayURL(payload.Relay)
+	if err != nil {
+		t.Fatalf("parse relay url: %v", err)
+	}
+	rogueConn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(parsedRelayURL), tunnelHeader("client", payload.SessionID))
+	if err != nil {
+		t.Fatalf("connect rogue client relay websocket: %v", err)
+	}
+	if err := rogueConn.WriteMessage(websocket.BinaryMessage, []byte("not a noise handshake")); err != nil {
+		_ = rogueConn.Close()
+		t.Fatalf("write rogue client handshake: %v", err)
+	}
+	if err := rogueConn.Close(); err != nil {
+		t.Fatalf("close rogue client connection: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	deadline := time.Now().Add(time.Second)
+	for {
+		stdout.Reset()
+		_, err = Exec(ctx, ExecConfig{
+			Invite:  session.Invite,
+			Command: "printf alive",
+			Stdout:  &stdout,
+		})
+		if err == nil {
+			break
+		}
+		select {
+		case hostErr := <-session.Done:
+			t.Fatalf("host stopped after rogue client handshake failure: %v", hostErr)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("exec after rogue client handshake failure: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if stdout.String() != "alive" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "alive")
+	}
+
+	select {
+	case err := <-session.Done:
+		t.Fatalf("host stopped after legitimate exec following rogue client: %v", err)
+	default:
+	}
+}
+
 func TestExecReturnsNonZeroExitCodeWithoutError(t *testing.T) {
 	server := httptest.NewServer(relay.NewServer().Handler())
 	defer server.Close()
@@ -283,11 +348,11 @@ func TestClientDisconnectCancelsSilentCommandPromptly(t *testing.T) {
 	conn, channel := connectTestClient(t, session.Invite)
 	request, err := encryptJSON(channel, message{Type: commandRequest, Command: "sleep 2; printf done > " + marker})
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("encrypt command request: %v", err)
 	}
 	if err := conn.WriteMessage(websocket.BinaryMessage, request); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("write command request: %v", err)
 	}
 	if err := conn.Close(); err != nil {
@@ -359,6 +424,56 @@ func TestHostIdleTimeout(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("host did not stop after idle timeout")
+	}
+}
+
+func TestHostIdleTimeoutNotResetByRogueClientHandshakeFailure(t *testing.T) {
+	server := httptest.NewServer(relay.NewServer().Handler())
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	session, err := StartHost(ctx, HostConfig{
+		RelayURL:    relayURL(server.URL),
+		IdleTimeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("start host: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	payload, err := invite.Decode(session.Invite)
+	if err != nil {
+		t.Fatalf("decode invite: %v", err)
+	}
+	parsedRelayURL, err := parseRelayURL(payload.Relay)
+	if err != nil {
+		t.Fatalf("parse relay url: %v", err)
+	}
+	rogueConn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(parsedRelayURL), tunnelHeader("client", payload.SessionID))
+	if err != nil {
+		t.Fatalf("connect rogue client relay websocket: %v", err)
+	}
+	if err := rogueConn.WriteMessage(websocket.BinaryMessage, []byte("not a noise handshake")); err != nil {
+		_ = rogueConn.Close()
+		t.Fatalf("write rogue client handshake: %v", err)
+	}
+	if err := rogueConn.Close(); err != nil {
+		t.Fatalf("close rogue client connection: %v", err)
+	}
+
+	select {
+	case err := <-session.Done:
+		if err == nil {
+			t.Fatal("host stopped without error, want idle timeout error")
+		}
+		if !strings.Contains(err.Error(), string(ErrorTypeIdleSessionTimeout)) {
+			t.Fatalf("host error = %v, want %s", err, ErrorTypeIdleSessionTimeout)
+		}
+	case <-time.After(700 * time.Millisecond):
+		t.Fatal("host did not stop after original idle timeout")
 	}
 }
 
@@ -468,7 +583,11 @@ func TestHostIdleTimeoutRestartsAfterCommandWhenClientKeepsSocketOpen(t *testing
 	}
 
 	conn, channel := connectTestClient(t, session.Invite)
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatalf("close client connection: %v", err)
+		}
+	}()
 
 	request, err := encryptJSON(channel, message{Type: commandRequest, Command: "printf ok"})
 	if err != nil {
@@ -531,7 +650,11 @@ func TestHostSendsCommandStartFailedErrorForRunFailure(t *testing.T) {
 	}
 
 	conn, channel := connectTestClient(t, session.Invite)
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatalf("close client connection: %v", err)
+		}
+	}()
 
 	request, err := encryptJSON(channel, message{Type: commandRequest, Command: " "})
 	if err != nil {
@@ -563,7 +686,11 @@ func TestHostSendsProtocolErrorForMalformedEncryptedMessage(t *testing.T) {
 	}
 
 	conn, channel := connectTestClient(t, session.Invite)
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Fatalf("close client connection: %v", err)
+		}
+	}()
 
 	if err := conn.WriteMessage(websocket.BinaryMessage, []byte("not encrypted tunnel json")); err != nil {
 		t.Fatalf("write malformed message: %v", err)
@@ -665,33 +792,33 @@ func connectTestClient(t *testing.T, inviteCode string) (*websocket.Conn, *secur
 	if err != nil {
 		t.Fatalf("parse relay url: %v", err)
 	}
-	conn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(relayURL, "client", payload.SessionID), nil)
+	conn, _, err := websocket.DefaultDialer.Dial(tunnelEndpoint(relayURL), tunnelHeader("client", payload.SessionID))
 	if err != nil {
 		t.Fatalf("connect client relay websocket: %v", err)
 	}
 
 	handshake, err := securechannel.NewClientHandshake(handshakeConfig(payload.SessionID, payload.Relay, payload.ClientSecret), payload.HostPublicKey)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("new client handshake: %v", err)
 	}
 	msg1, err := handshake.WriteMessage()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("write handshake message: %v", err)
 	}
 	if err := conn.WriteMessage(websocket.BinaryMessage, msg1); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("write client handshake: %v", err)
 	}
 	_, msg2, err := conn.ReadMessage()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("read host handshake: %v", err)
 	}
 	channel, err := handshake.ReadMessage(msg2)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("read handshake message: %v", err)
 	}
 	return conn, channel
@@ -729,13 +856,26 @@ func testChannels(t *testing.T) (*securechannel.Channel, *securechannel.Channel)
 	if err != nil {
 		t.Fatalf("generate host keypair: %v", err)
 	}
-	client, host, err := securechannel.EstablishChannelWithHostKey(
-		handshakeConfig("test-session", "ws://relay.example", clientSecret),
-		hostKey,
-		hostKey.Public,
-	)
+	cfg := handshakeConfig("test-session", "ws://relay.example", clientSecret)
+	clientHS, err := securechannel.NewClientHandshake(cfg, hostKey.Public)
 	if err != nil {
-		t.Fatalf("establish channel: %v", err)
+		t.Fatalf("new client handshake: %v", err)
+	}
+	hostHS, err := securechannel.NewHostHandshake(cfg, hostKey)
+	if err != nil {
+		t.Fatalf("new host handshake: %v", err)
+	}
+	msg1, err := clientHS.WriteMessage()
+	if err != nil {
+		t.Fatalf("client write message: %v", err)
+	}
+	msg2, host, err := hostHS.ReadMessage(msg1)
+	if err != nil {
+		t.Fatalf("host read message: %v", err)
+	}
+	client, err := clientHS.ReadMessage(msg2)
+	if err != nil {
+		t.Fatalf("client read message: %v", err)
 	}
 	return client, host
 }

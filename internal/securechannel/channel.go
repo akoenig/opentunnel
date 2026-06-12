@@ -1,7 +1,6 @@
 package securechannel
 
 import (
-	"crypto/subtle"
 	"fmt"
 	"io"
 
@@ -41,37 +40,6 @@ func GenerateHostKeypair(r io.Reader) (HostKeypair, error) {
 		Public:  append([]byte(nil), key.Public...),
 		private: key,
 	}, nil
-}
-
-// EstablishChannelWithHostKey performs the v1 NKpsk0 handshake for a known host key and returns client, host channels.
-func EstablishChannelWithHostKey(cfg HandshakeConfig, hostKey HostKeypair, expectedHostPublic []byte) (*Channel, *Channel, error) {
-	if subtle.ConstantTimeCompare(hostKey.Public, expectedHostPublic) != 1 {
-		return nil, nil, ErrHostKeyMismatch
-	}
-
-	clientHS, err := NewClientHandshake(cfg, expectedHostPublic)
-	if err != nil {
-		return nil, nil, err
-	}
-	hostHS, err := NewHostHandshake(cfg, hostKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	msg1, err := clientHS.WriteMessage()
-	if err != nil {
-		return nil, nil, err
-	}
-	msg2, host, err := hostHS.ReadMessage(msg1)
-	if err != nil {
-		return nil, nil, err
-	}
-	client, err := clientHS.ReadMessage(msg2)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return client, host, nil
 }
 
 // NewClientHandshake creates a client-side NKpsk0 handshake for a known host public key.
@@ -151,10 +119,6 @@ func (h *HostHandshake) ReadMessage(message []byte) ([]byte, *Channel, error) {
 	return response, &Channel{send: hostSend, recv: hostRecv}, nil
 }
 
-func establishNKpsk0(cfg HandshakeConfig, hostKey noise.DHKey, expectedHostPublic []byte) (*Channel, *Channel, error) {
-	return establishNKpsk0WithConfigs(cfg, cfg, hostKey, expectedHostPublic)
-}
-
 func nkpsk0Config(cfg HandshakeConfig) (noise.Config, error) {
 	prologue, err := BuildPrologue(NewPrologueConfig(cfg))
 	if err != nil {
@@ -168,60 +132,6 @@ func nkpsk0Config(cfg HandshakeConfig) (noise.Config, error) {
 		PresharedKey:          cfg.ClientSecret[:],
 		PresharedKeyPlacement: 0,
 	}, nil
-}
-
-func establishNKpsk0WithConfigs(clientCfg HandshakeConfig, hostCfg HandshakeConfig, hostKey noise.DHKey, expectedHostPublic []byte) (*Channel, *Channel, error) {
-	if len(expectedHostPublic) == 0 {
-		return nil, nil, fmt.Errorf("%w: expected host public key is required", ErrHostKeyMismatch)
-	}
-	if subtle.ConstantTimeCompare(hostKey.Public, expectedHostPublic) != 1 {
-		return nil, nil, ErrHostKeyMismatch
-	}
-
-	clientNoiseCfg, err := nkpsk0Config(clientCfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	clientNoiseCfg.Initiator = true
-	clientNoiseCfg.PeerStatic = expectedHostPublic
-
-	clientHS, err := noise.NewHandshakeState(clientNoiseCfg)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: create client handshake: %w", ErrHandshakeFailed, err)
-	}
-
-	hostNoiseCfg, err := nkpsk0Config(hostCfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	hostNoiseCfg.Initiator = false
-	hostNoiseCfg.StaticKeypair = hostKey
-
-	hostHS, err := noise.NewHandshakeState(hostNoiseCfg)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: create host handshake: %w", ErrHandshakeFailed, err)
-	}
-
-	msg1, _, _, err := clientHS.WriteMessage(nil, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: client write handshake: %w", ErrHandshakeFailed, err)
-	}
-
-	if _, _, _, err := hostHS.ReadMessage(nil, msg1); err != nil {
-		return nil, nil, fmt.Errorf("%w: host read handshake: %w", ErrHandshakeFailed, err)
-	}
-
-	msg2, hostRecv, hostSend, err := hostHS.WriteMessage(nil, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: host write handshake: %w", ErrHandshakeFailed, err)
-	}
-
-	_, clientSend, clientRecv, err := clientHS.ReadMessage(nil, msg2)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: client read handshake: %w", ErrHandshakeFailed, err)
-	}
-
-	return &Channel{send: clientSend, recv: clientRecv}, &Channel{send: hostSend, recv: hostRecv}, nil
 }
 
 // Encrypt encrypts one transport frame for the peer.

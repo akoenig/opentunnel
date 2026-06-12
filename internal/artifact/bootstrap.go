@@ -2,8 +2,9 @@ package artifact
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
+
+	"opentunnel/internal/originurl"
 )
 
 // BootstrapArtifact contains the checksum for one supported CLI artifact.
@@ -75,6 +76,7 @@ if [ -e "$cache_base" ] && [ ! -d "$cache_base" ]; then
 fi
 mkdir -p "$cache_base"
 chmod 700 "$cache_base"
+# expected_checksum is assigned by the platform case above and scopes the cache by artifact content.
 cache_dir="${cache_base}/${platform}/${version}/${expected_checksum}"
 bin="${cache_dir}/opentunnel"
 download_root=$(mktemp -d "${TMPDIR:-/tmp}/opentunnel-cli-download.XXXXXX")
@@ -195,25 +197,7 @@ func renderChecksumCases(checksums map[string]string) string {
 }
 
 func validateRelayOrigin(relayOrigin string) error {
-	if strings.HasPrefix(relayOrigin, "-") {
-		return fmt.Errorf("relay origin must be an http or https origin")
-	}
-
-	parsed, err := url.Parse(relayOrigin)
-	if err != nil {
-		return fmt.Errorf("relay origin must be an http or https origin: %w", err)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("relay origin must use http or https")
-	}
-	if parsed.Host == "" {
-		return fmt.Errorf("relay origin must include a host")
-	}
-	if parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
-		return fmt.Errorf("relay origin must not include userinfo, path, query, or fragment")
-	}
-
-	return nil
+	return originurl.Validate(relayOrigin, "relay origin")
 }
 
 func shellQuote(value string) string {
