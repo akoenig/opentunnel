@@ -1,0 +1,40 @@
+// Cloudflare configuration for the hosted relay at relay.opentunnel.sh.
+// The relay runs as a single container instance behind a Worker; see
+// src/index.js for why exactly one instance is required.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "opentunnel-relay",
+	"main": "src/index.js",
+	"compatibility_date": "2026-06-01",
+	"containers": [
+		{
+			"class_name": "RelayContainer",
+			"image": "./Dockerfile",
+			"max_instances": 1,
+			"instance_type": "basic"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "RELAY",
+				"class_name": "RelayContainer"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["RelayContainer"]
+		}
+	],
+	"routes": [
+		{
+			"pattern": "relay.opentunnel.sh",
+			"custom_domain": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}
