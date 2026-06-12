@@ -24,6 +24,18 @@ pnpm preview:worker   # build + run the real Worker locally (wrangler dev)
 
 ## Deployment
 
+Pushes to `main` that touch `website/**` deploy automatically via GitHub
+Actions (`.github/workflows/deploy-website.yml`). The workflow needs two
+repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`: an API token created from the "Edit Cloudflare
+  Workers" template (Workers Scripts edit plus zone access for the
+  `opentunnel.sh` custom domain).
+- `CLOUDFLARE_ACCOUNT_ID`: the account id shown on the Cloudflare dashboard
+  overview page.
+
+Manual deployment remains available:
+
 ```bash
 pnpm deploy           # astro build && wrangler deploy
 ```
