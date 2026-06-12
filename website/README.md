@@ -44,13 +44,20 @@ Deploys the Worker `opentunnel-website` with `dist/` as static assets and a
 custom domain route for `opentunnel.sh` (see `wrangler.jsonc`). Requires an
 authenticated wrangler session (`pnpx wrangler login`) or `CLOUDFLARE_API_TOKEN`.
 
-## The `/cli` Route
+## Tunnel-Creation Routes
 
-`https://opentunnel.sh/cli` responds with an HTTP 308 redirect to
-`https://relay.opentunnel.sh/cli` (see `worker/index.js`). It must stay a
-redirect (never a proxy) because the relay bakes its `--public-url` into the
-served bootstrapper, and binary downloads plus checksum verification are
-same-origin against the relay.
+The Worker (see `worker/index.js`) provides three doors into one script:
+
+- `/cli` responds with an HTTP 308 redirect to
+  `https://relay.opentunnel.sh/cli`.
+- `/create` serves a short, self-documenting shell script that fetches the
+  relay bootstrapper and runs `create`, forwarding extra arguments.
+- `/` serves that same script to curl/wget user agents and the website to
+  everyone else.
+
+All of them must stay redirects or thin wrappers (never proxies) because the
+relay bakes its `--public-url` into the served bootstrapper, and binary
+downloads plus checksum verification are same-origin against the relay.
 
 ## Content Source
 

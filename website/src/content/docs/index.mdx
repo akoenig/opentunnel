@@ -16,7 +16,7 @@ hero:
       <div class="ot-flow" aria-hidden="true">
         <div class="ot-terminal">
           <div class="ot-terminal-bar"><span></span><span></span><span></span><em>1 · on the remote machine</em></div>
-          <pre><code><span class="ot-prompt">$</span> curl -fsSL https://opentunnel.sh/cli | sh -s -- create
+          <pre><code><span class="ot-prompt">$</span> curl -fsSL https://opentunnel.sh/create | sh
 
       I opened an OpenTunnel session for you.
       <span class="ot-dim">Session active. Press Ctrl+C to revoke access.</span></code></pre>
@@ -81,7 +81,7 @@ import { ContainerSection } from 'lucode-starlight/components';
 1. **Start a session on the remote machine.**
 
    ```bash
-   curl -fsSL https://opentunnel.sh/cli | sh -s -- create
+   curl -fsSL https://opentunnel.sh/create | sh
    ```
 
    A temporary CLI is downloaded, checksum-verified, and opens one foreground session.
@@ -154,8 +154,7 @@ import { ContainerSection } from 'lucode-starlight/components';
 		<p class="ot-bento-text">Zero setup. Start tunneling right now through the official relay.</p>
 
     ```bash
-    curl -fsSL https://opentunnel.sh/cli \
-      | sh -s -- create
+    curl -fsSL https://opentunnel.sh/create | sh
     ```
 
 	</article>

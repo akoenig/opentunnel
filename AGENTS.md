@@ -49,7 +49,7 @@
 
 - `website/` is an Astro Starlight site with the `lucode-starlight` theme, served at https://opentunnel.sh as Cloudflare Workers static assets (`wrangler.jsonc`, `worker/index.js`).
 - Use `pnpm` and `pnpx` for all JavaScript tooling; never `npm` or `npx`.
-- `https://opentunnel.sh/cli` is an HTTP 308 redirect to the relay (`worker/index.js`). It must stay a redirect, never a proxy: the relay bakes `--public-url` into the served bootstrapper, and checksum verification is same-origin against the relay.
+- The Worker (`worker/index.js`) provides tunnel-creation routes: `/cli` is an HTTP 308 redirect to the relay, `/create` serves a thin wrapper script that fetches the relay bootstrapper and runs `create`, and `/` serves that same script to curl/wget user agents. All must stay redirects or thin wrappers, never proxies: the relay bakes `--public-url` into the served bootstrapper, and checksum verification is same-origin against the relay.
 - Fonts (Geist, Geist Mono) are embedded as base64 data URIs in `website/src/styles/fonts.css` so text can never paint in a fallback font and swap. Do not reintroduce asynchronous font loading, preloads, or external font files.
 - Keep font ligatures disabled in code contexts; Geist Mono otherwise fuses `--` into a single long dash.
 - Verify website changes with `pnpm build`; judge visuals with `pnpm preview:worker`, not the dev server (Vite injects styles late in dev and misrepresents fonts and layout).
