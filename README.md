@@ -23,7 +23,7 @@ Agents are brilliant on the machine they run on. The moment the task lives on an
 
 OpenTunnel removes the wall without creating permanent access. You start one foreground process on the remote machine and paste the printed prompt into your agent. From then on, the agent runs commands there like any other tool call: stdout, stderr, and the real exit code come back as if the machine were local. When the task is done, you press Ctrl+C. The session ends, the invite expires, and no trace of the access remains.
 
-## Sixty seconds to a working tunnel
+## Three steps, zero infrastructure
 
 **1 · On the remote machine**
 
@@ -38,14 +38,7 @@ A temporary CLI is downloaded, checksum-verified, and opens one foreground sessi
 
 **2 · In your agent**
 
-Paste the printed prompt. Your agent now has a remote shell as a tool and runs commands like this on its own:
-
-```bash
-curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
-  -- 'systemctl restart caddy'
-```
-
-Remote stdout and stderr stream back, and `exec` exits with the remote command's exit code. To the agent, the remote machine feels local. The invite travels in `OPENTUNNEL_INVITE` to keep it out of process command lines; `--invite-stdin` is available for stronger local secrecy.
+Paste the printed prompt. That's all: the prompt tells your agent everything it needs, and from that moment it runs commands on the remote machine as regular tool calls, with stdout, stderr, and the real exit code coming back as if the machine were local.
 
 **3 · Press Ctrl+C when you're done**
 
