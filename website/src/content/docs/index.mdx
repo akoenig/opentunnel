@@ -1,0 +1,193 @@
+---
+title: OpenTunnel
+description: Your agent's tool calls, on any machine. Ephemeral, end-to-end encrypted command tunnels for AI agents. No SSH, no accounts, no standing access.
+template: splash
+editUrl: false
+lastUpdated: false
+hero:
+  layout: split-left
+  title: Your agent's tool calls,<br />on any machine.
+  announcement:
+    text: Remote tool calls as if they were local
+    link: /concepts/how-it-works/
+  tagline: OpenTunnel lets your AI agent run commands on remote machines as if it were sitting right there, through an ephemeral, end-to-end encrypted tunnel. No SSH, no accounts, no standing access. Ctrl+C and it's gone.
+  image:
+    html: |
+      <div class="ot-flow" aria-hidden="true">
+        <div class="ot-terminal">
+          <div class="ot-terminal-bar"><span></span><span></span><span></span><em>1 · on the remote machine</em></div>
+          <pre><code><span class="ot-prompt">$</span> curl -fsSL https://opentunnel.sh/cli | sh -s -- create
+
+      I opened an OpenTunnel session for you.
+      <span class="ot-dim">Session active. Press Ctrl+C to revoke access.</span></code></pre>
+        </div>
+        <div class="ot-connector"><span>paste the printed prompt into your agent</span></div>
+        <div class="ot-chat">
+          <div class="ot-chat-bar"><span class="ot-chat-status"></span><em>2 · in your agent</em></div>
+          <div class="ot-chat-body">
+            <div class="ot-msg-user">Staging is down. Can you take a look?</div>
+            <div class="ot-msg-agent">
+              <div class="ot-toolcall">
+                <div class="ot-toolcall-head">Bash <span class="ot-via">· via OpenTunnel</span></div>
+                <code><span class="ot-prompt">$</span> systemctl restart caddy <span class="ot-exit">exit 0</span></code>
+              </div>
+              <p>Caddy had stopped on staging. I restarted it and the site is reachable again.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+    - text: Self-host the relay
+      link: /guides/self-hosting/
+      variant: minimal
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { ContainerSection } from 'lucode-starlight/components';
+
+<ContainerSection width="md">
+
+<div class="ot-section-head">
+
+<p class="ot-eyebrow">What is OpenTunnel?</p>
+
+## Your agent ends at localhost
+
+<p class="ot-lede">Agents are brilliant on the machine they run on. The moment the task lives on another machine (a server, a build box, your homelab) they hit a wall of SSH keys, firewall rules, and standing credentials. Permanent infrastructure for a temporary need.</p>
+
+<p class="ot-support">OpenTunnel is an ephemeral, end-to-end encrypted command tunnel built for exactly this moment. You start one foreground process on the remote machine and paste the printed prompt into your agent. From then on, the agent runs commands there like any other tool call: it sends a command, and stdout, stderr, and the real exit code come back as if the machine were local.</p>
+
+<p class="ot-support">There is nothing to install and nothing to provision. No SSH keys to create and distribute, no inbound ports to open, no account to register. A relay routes the encrypted traffic between the two sides, but it cannot read it and it stores nothing. When the task is done, you press Ctrl+C: the session ends, the invite expires, and no trace of the access remains.</p>
+
+</div>
+
+</ContainerSection>
+
+<ContainerSection width="md">
+
+<div class="ot-section-head">
+
+<p class="ot-eyebrow">How it works</p>
+
+## Three steps, zero infrastructure
+
+</div>
+
+<Steps>
+
+1. **Start a session on the remote machine.**
+
+   ```bash
+   curl -fsSL https://opentunnel.sh/cli | sh -s -- create
+   ```
+
+   A temporary CLI is downloaded, checksum-verified, and opens one foreground session.
+
+2. **Paste the generated prompt into your agent.**
+
+   Your agent now has a remote shell as a tool. It runs commands and gets stdout, stderr, and exit codes back as if they were local tool calls.
+
+3. **Press Ctrl+C when you're done.**
+
+   The session ends, access is revoked, the temporary CLI is gone. Nothing persists, not on your machine and not on the relay.
+
+</Steps>
+
+</ContainerSection>
+
+<ContainerSection width="lg">
+
+<div class="ot-section-head">
+
+<p class="ot-eyebrow">Security</p>
+
+## You don't have to trust the relay.
+
+<p class="ot-lede">The relay routes opaque, encrypted frames between your agent and the remote machine. It cannot read your traffic, so it doesn't matter who operates it.</p>
+
+</div>
+
+<div class="ot-bento">
+	<article class="ot-bento-item ot-span-2">
+		<svg class="ot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+		<p class="ot-bento-title">End-to-end encrypted</p>
+		<p class="ot-bento-text">Commands, output, and exit codes are encrypted between host and client. The relay forwards ciphertext and sees only routing metadata, timing, and frame sizes.</p>
+	</article>
+	<article class="ot-bento-item">
+		<svg class="ot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 18 0V5" /><path d="M3 12a9 3 0 0 0 18 0" /></svg>
+		<p class="ot-bento-title">Nothing persisted</p>
+		<p class="ot-bento-text">Only in-memory state for active connections. No sessions, invites, payloads, logs, or client metadata are ever stored.</p>
+	</article>
+	<article class="ot-bento-item">
+		<svg class="ot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10" /><path d="M18.4 6.6a9 9 0 1 1-12.77.04" /></svg>
+		<p class="ot-bento-title">Revocation is Ctrl+C</p>
+		<p class="ot-bento-text">Access lives exactly as long as the foreground host process. Stop it, and the tunnel ceases to exist.</p>
+	</article>
+	<article class="ot-bento-item ot-span-2">
+		<svg class="ot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" /><circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></svg>
+		<p class="ot-bento-title">No accounts, no keys</p>
+		<p class="ot-bento-text">No signup, no tokens to rotate, no SSH keys to distribute and forget. A session invite is the only secret, and it expires with the session.</p>
+	</article>
+</div>
+
+</ContainerSection>
+
+<ContainerSection width="lg">
+
+<div class="ot-section-head">
+
+<p class="ot-eyebrow">Deployment</p>
+
+## Use mine, or run your own
+
+<p class="ot-lede">Because the relay only ever sees ciphertext, the hosted relay is safe to use as-is. And because it needs no database, no accounts, and no persistent state, self-hosting is one command.</p>
+
+</div>
+
+<div class="ot-bento ot-bento-2">
+	<article class="ot-bento-item">
+		<svg class="ot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+		<p class="ot-bento-title">Hosted relay</p>
+		<p class="ot-bento-text">Zero setup. Start tunneling right now through the official relay.</p>
+
+    ```bash
+    curl -fsSL https://opentunnel.sh/cli \
+      | sh -s -- create
+    ```
+
+	</article>
+	<article class="ot-bento-item">
+		<svg class="ot-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2" /><rect width="20" height="8" x="2" y="14" rx="2" ry="2" /><line x1="6" x2="6.01" y1="6" y2="6" /><line x1="6" x2="6.01" y1="18" y2="18" /></svg>
+		<p class="ot-bento-title">Self-hosted relay</p>
+		<p class="ot-bento-text">One stateless container behind your reverse proxy. Full control over the origin your agents fetch from.</p>
+
+    ```bash
+    docker run -p 8080:8080 \
+      ghcr.io/akoenig/opentunnel:latest \
+      relay --public-url https://relay.example.com
+    ```
+
+	</article>
+</div>
+
+</ContainerSection>
+
+<ContainerSection width="md">
+
+<div class="ot-section-head">
+
+<p class="ot-eyebrow">Philosophy</p>
+
+## Deliberately small
+
+<p class="ot-lede">OpenTunnel keeps the access model temporary and narrow on purpose. That is the security model, not a missing feature list. No accounts, no daemons, no audit logs (because there is nothing to log), no PTY, no file transfer, one client, one command at a time.</p>
+
+[Read the full scope and non-goals →](/reference/scope-and-non-goals/)
+
+</div>
+
+</ContainerSection>
+

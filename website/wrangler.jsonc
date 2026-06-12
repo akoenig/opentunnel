@@ -1,0 +1,25 @@
+// Cloudflare Workers configuration for opentunnel.sh.
+// The site is a static Astro Starlight build served via Workers static assets.
+// The worker script only handles /cli, which redirects to the hosted relay so
+// `curl -fsSL https://opentunnel.sh/cli | sh` works from the apex domain.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "opentunnel-website",
+	"compatibility_date": "2026-06-01",
+	"main": "worker/index.js",
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"not_found_handling": "404-page",
+		"run_worker_first": ["/cli"]
+	},
+	"routes": [
+		{
+			"pattern": "opentunnel.sh",
+			"custom_domain": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}
