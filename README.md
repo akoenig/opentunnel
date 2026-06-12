@@ -17,7 +17,7 @@ No SSH, no accounts, no standing access. Ctrl+C and it's gone.
 
 ---
 
-## Your agent ends at localhost
+## Great agents, stuck on one machine. Until now.
 
 Agents are brilliant on the machine they run on. The moment the task lives on another machine (a server, a build box, your homelab) they hit a wall of SSH keys, firewall rules, and standing credentials. Permanent infrastructure for a temporary need.
 
