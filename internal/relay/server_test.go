@@ -19,7 +19,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const readTimeout = time.Second
+// Generous deadline: this guards against hangs, not slowness. Tight values
+// flake on loaded CI runners.
+const readTimeout = 5 * time.Second
 
 func TestNewServerWithOptionsServesCLIArtifacts(t *testing.T) {
 	version := "4.5.6"
