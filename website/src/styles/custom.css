@@ -609,6 +609,61 @@ pre,
 	max-width: 100%;
 }
 
+/* ---------------------------------------------------------------------------
+ * Search modal: align the Pagefind dialog with the site palette.
+ * The theme leaves it on Starlight's legacy grays (--sl-color-gray-6 panel,
+ * --sl-color-black result wells), which read as flat dark slabs next to the
+ * page. Restyle it like the footer hovercard: page background, soft
+ * color-mix borders, layered shadow.
+ * The theme's component styles carry an Astro scope attribute, so every
+ * selector here adds one extra simple selector to outrank them.
+ * ------------------------------------------------------------------------ */
+
+site-search dialog[aria-label] {
+	background-color: var(--background, var(--sl-color-bg));
+	border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+	box-shadow:
+		0 1px 2px rgb(0 0 0 / 0.08),
+		0 24px 60px -16px rgb(0 0 0 / 0.35);
+}
+
+@media (min-width: 50rem) {
+	site-search dialog[aria-label] {
+		border-radius: 0.9rem;
+	}
+}
+
+/* Pagefind variables: input chip like our code frames, monochrome accents. */
+site-search .search-container #starlight__search {
+	--pagefind-ui-primary: var(--foreground);
+	--pagefind-ui-text: var(--muted-foreground, var(--sl-color-gray-3));
+	--pagefind-ui-background: color-mix(in oklab, var(--foreground) 4%, var(--background));
+	--pagefind-ui-border: color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+site-search #starlight__search input:focus {
+	--pagefind-ui-border: color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+
+/* Result wells: subtle raised chips instead of solid black blocks. */
+site-search #starlight__search .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)),
+site-search #starlight__search .pagefind-ui__result-nested {
+	background-color: color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+
+/* Hover and focus: soften the theme's full-strength foreground outline. */
+site-search #starlight__search .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)):hover,
+site-search #starlight__search .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)):focus-within,
+site-search #starlight__search .pagefind-ui__result-nested:hover,
+site-search #starlight__search .pagefind-ui__result-nested:focus-within {
+	outline: 1px solid color-mix(in oklab, var(--foreground) 25%, transparent);
+}
+
+site-search #starlight__search .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)):focus-within,
+site-search #starlight__search .pagefind-ui__result-nested:focus-within {
+	background-color: color-mix(in oklab, var(--foreground) 7%, transparent);
+}
+
 /* Subtle monochrome "Copied" tooltip on code-block copy buttons. */
 .expressive-code .feedback {
 	--tooltip-bg: color-mix(in oklab, var(--foreground) 8%, var(--background));
