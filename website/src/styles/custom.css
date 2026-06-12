@@ -61,7 +61,27 @@ pre,
 	color: var(--ot-body-text);
 }
 
-/* Footer avatar rendered from the footerText markdown image. */
+/* ---------------------------------------------------------------------------
+ * Footer: pill container with an author hovercard.
+ * ------------------------------------------------------------------------ */
+
+/* The theme hides the footer on docs pages; we want it everywhere. */
+[data-slot='layout'] > footer {
+	display: flex !important;
+}
+
+/* Pill around the footer text. Keep normal inline flow (no flex) so the
+   whitespace between words and links is preserved. */
+[data-slot='layout'] > footer [data-slot='footer-text'] {
+	display: block;
+	width: fit-content !important;
+	margin-inline: auto;
+	padding: 0.5rem 1.2rem !important;
+	border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--foreground) 2%, transparent);
+}
+
 [data-slot='footer-text'] img {
 	width: 1.3rem;
 	height: 1.3rem;
@@ -69,6 +89,107 @@ pre,
 	display: inline-block;
 	vertical-align: -0.35em;
 	border: 1px solid color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+.ot-hovercard {
+	position: relative;
+	display: inline-block;
+}
+
+.ot-hc-trigger {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+.ot-hc-pop {
+	position: absolute;
+	bottom: calc(100% + 0.7rem);
+	left: 50%;
+	transform: translate(-50%, 6px) scale(0.98);
+	transform-origin: bottom center;
+	display: flex;
+	flex-direction: column;
+	gap: 0.8rem;
+	width: 14.5rem;
+	padding: 1rem;
+	text-align: left;
+	background: var(--background, var(--sl-color-bg));
+	border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+	border-radius: 0.9rem;
+	box-shadow:
+		0 1px 2px rgb(0 0 0 / 0.08),
+		0 16px 40px -12px rgb(0 0 0 / 0.35);
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity 0.18s ease,
+		transform 0.18s ease,
+		visibility 0.18s;
+	z-index: 60;
+}
+
+/* Invisible bridge so the pointer can travel from trigger to card. */
+.ot-hc-pop::after {
+	content: '';
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	height: 0.8rem;
+}
+
+.ot-hovercard:hover .ot-hc-pop,
+.ot-hovercard:focus-within .ot-hc-pop {
+	opacity: 1;
+	visibility: visible;
+	transform: translate(-50%, 0) scale(1);
+}
+
+.ot-hc-head {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+}
+
+[data-slot='footer-text'] .ot-hc-head img {
+	width: 2.5rem;
+	height: 2.5rem;
+}
+
+.ot-hc-name {
+	display: block;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--foreground, var(--sl-color-white));
+}
+
+.ot-hc-links {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	border-top: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+	padding-top: 0.8rem;
+}
+
+.ot-hc-links a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	font-size: 0.8rem;
+	color: var(--ot-body-text);
+	text-decoration: none;
+	transition: color 0.15s ease;
+}
+
+.ot-hc-links a:hover {
+	color: var(--foreground, var(--sl-color-white));
+}
+
+.ot-hc-links svg {
+	width: 0.95rem;
+	height: 0.95rem;
+	fill: currentColor;
 }
 
 /* ---------------------------------------------------------------------------
