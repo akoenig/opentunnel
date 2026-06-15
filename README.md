@@ -17,7 +17,7 @@ No SSH, no accounts, no standing access. Ctrl+C and it's gone.
 
 ---
 
-## Great agents, stuck on one machine.<br>Until now.
+## Great agents, stuck on one machine.<br>Let's fix that.
 
 Agents are brilliant on the machine they run on. The moment the task lives on another machine, they hit a wall of SSH keys, firewall rules, and standing credentials. Permanent infrastructure for a temporary need.
 

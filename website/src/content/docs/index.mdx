@@ -54,7 +54,7 @@ import { ContainerSection } from 'lucode-starlight/components';
 
 <p class="ot-eyebrow">What is OpenTunnel?</p>
 
-## Great agents, stuck on one machine.<br />Until now.
+## Great agents, stuck on one machine.<br />Let's fix that.
 
 <p class="ot-lede">Agents are brilliant on the machine they run on. The moment the task lives on another machine, they hit a wall of SSH keys, firewall rules, and standing credentials. Permanent infrastructure for a temporary need.</p>
 
@@ -62,6 +62,61 @@ import { ContainerSection } from 'lucode-starlight/components';
 
 <p class="ot-support">There is nothing to install and nothing to provision. No SSH keys to create and distribute, no inbound ports to open, no account to register. A relay routes the encrypted traffic between the two sides, but it cannot read it and it stores nothing. When the task is done, you press Ctrl+C: the session ends, the invite expires, and no trace of the access remains.</p>
 
+</div>
+
+</ContainerSection>
+
+<ContainerSection width="lg">
+
+<div class="ot-vs-row">
+	<article class="ot-compare-col">
+		<span class="ot-compare-tag">With SSH</span>
+		<ul class="ot-compare-steps">
+			<li>Generate an SSH key and copy it onto the server</li>
+			<li>Give the server a public address or forwarded port</li>
+			<li>Or stand up a VPN or bastion to reach it</li>
+			<li>Connect inbound and hand the agent a shell</li>
+		</ul>
+		<p class="ot-compare-outcome ot-compare-lingers">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" x2="3" y1="12" y2="12" /></svg>
+			<span>The machine has to be exposed to the outside, and it stays that way.</span>
+		</p>
+	</article>
+	<div class="ot-vs-badge">vs</div>
+	<article class="ot-compare-col ot-compare-col-after">
+		<span class="ot-compare-tag">With OpenTunnel</span>
+		<ul class="ot-compare-steps">
+			<li>Run one command on the remote machine</li>
+			<li>Paste the prompt to your agent. Both are connected.</li>
+		</ul>
+		<p class="ot-compare-outcome ot-compare-clean">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
+			<span>It works from a private network, behind any firewall, exposing nothing.</span>
+		</p>
+	</article>
+</div>
+
+<p class="ot-marquee-lead">What if your agent could work directly on the remote machine?</p>
+
+<div class="ot-marquee" aria-hidden="true">
+	<div class="ot-marquee-track">
+		<span class="ot-marquee-item">Debug a crashing service</span>
+		<span class="ot-marquee-item">Run a security audit</span>
+		<span class="ot-marquee-item">Provision a fresh server</span>
+		<span class="ot-marquee-item">Respond to an incident</span>
+		<span class="ot-marquee-item">Triage production logs</span>
+		<span class="ot-marquee-item">Roll back a bad deployment</span>
+		<span class="ot-marquee-item">Apply updates and restart</span>
+		<span class="ot-marquee-item">Manage a homelab box</span>
+		<span class="ot-marquee-item">Debug a crashing service</span>
+		<span class="ot-marquee-item">Run a security audit</span>
+		<span class="ot-marquee-item">Provision a fresh server</span>
+		<span class="ot-marquee-item">Respond to an incident</span>
+		<span class="ot-marquee-item">Triage production logs</span>
+		<span class="ot-marquee-item">Roll back a bad deployment</span>
+		<span class="ot-marquee-item">Apply updates and restart</span>
+		<span class="ot-marquee-item">Manage a homelab box</span>
+	</div>
 </div>
 
 </ContainerSection>

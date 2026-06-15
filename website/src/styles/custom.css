@@ -679,3 +679,233 @@ site-search #starlight__search .pagefind-ui__result-nested:focus-within {
 .expressive-code .feedback::after {
 	display: none;
 }
+
+/* ---------------------------------------------------------------------------
+ * Reachability comparison: two step columns with a timeline spine. A distinct
+ * pattern from the hero terminals and the bento grids. The point is what each
+ * path requires of the machine (exposed inbound vs dialing out), carried by
+ * the outcome footers and their in/out arrows.
+ * ------------------------------------------------------------------------ */
+
+/* Horizontal comparison: SSH card, a center "vs" badge, OpenTunnel card. */
+.ot-vs-row {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 1rem;
+	align-items: center;
+	justify-items: center;
+}
+
+@media (min-width: 768px) {
+	.ot-vs-row {
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		gap: 1.25rem;
+	}
+}
+
+.ot-vs-row .ot-compare-col {
+	width: 100%;
+}
+
+.ot-vs-badge {
+	align-self: center;
+	display: grid;
+	place-items: center;
+	width: 2.85rem;
+	height: 2.85rem;
+	border-radius: 50%;
+	border: 1px solid color-mix(in oklab, var(--foreground) 14%, transparent);
+	background: var(--background, var(--sl-color-bg));
+	box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground, var(--sl-color-gray-3));
+}
+
+/* The question the marquee answers. */
+.ot-marquee-lead {
+	margin: 2.75rem 0 1.4rem;
+	text-align: center;
+	font-size: 0.95rem;
+	font-weight: 400;
+	color: var(--muted-foreground, var(--sl-color-gray-3));
+}
+
+/* Use-case marquee: a slow, edge-faded ticker of what agents do with it. */
+.ot-marquee {
+	margin-top: 0;
+	overflow: hidden;
+	-webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+	mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+}
+
+.ot-marquee-track {
+	display: flex;
+	width: max-content;
+	gap: 0.85rem;
+	animation: ot-marquee-scroll 48s linear infinite;
+}
+
+.ot-marquee:hover .ot-marquee-track {
+	animation-play-state: paused;
+}
+
+@keyframes ot-marquee-scroll {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+.ot-marquee-item {
+	flex: none;
+	padding: 0.5rem 1.05rem;
+	border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--foreground) 2%, transparent);
+	font-size: 0.85rem;
+	white-space: nowrap;
+	color: var(--muted-foreground, var(--sl-color-gray-3));
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ot-marquee {
+		-webkit-mask-image: none;
+		mask-image: none;
+	}
+
+	.ot-marquee-track {
+		animation: none;
+		flex-wrap: wrap;
+		width: 100%;
+		justify-content: center;
+		row-gap: 0.85rem;
+	}
+}
+
+/* SSH card recedes: flat, quiet, the old way. */
+.ot-compare-col {
+	display: flex;
+	flex-direction: column;
+	padding: 1.9rem 1.9rem 1.6rem;
+	border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+	border-radius: 1rem;
+	background: transparent;
+}
+
+/* OpenTunnel card leads: elevated, green-accented, full contrast. */
+.ot-compare-col-after {
+	border-color: color-mix(in oklab, var(--ot-green-semantic) 42%, transparent);
+	background:
+		radial-gradient(
+			ellipse 95% 70% at 50% 0%,
+			color-mix(in oklab, var(--ot-green-semantic) 9%, transparent),
+			transparent 72%
+		),
+		var(--background, var(--sl-color-bg));
+	box-shadow:
+		0 1px 2px rgb(0 0 0 / 0.1),
+		0 22px 50px -26px color-mix(in oklab, var(--ot-green-semantic) 55%, transparent);
+}
+
+/* SSH steps read quieter than OpenTunnel's. */
+.ot-compare-col .ot-compare-steps li {
+	color: var(--muted-foreground, var(--sl-color-gray-3));
+}
+
+.ot-compare-col-after .ot-compare-steps li {
+	color: var(--foreground, var(--sl-color-white));
+}
+
+.ot-compare-tag {
+	display: inline-block;
+	margin-bottom: 1.6rem;
+	font-size: var(--sl-text-xs);
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground, var(--sl-color-gray-3));
+}
+
+.ot-compare-col-after .ot-compare-tag {
+	color: var(--ot-green-semantic);
+}
+
+.ot-compare-steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.ot-compare-steps li {
+	position: relative;
+	padding: 0 0 1.15rem 1.85rem;
+	font-size: 0.95rem;
+	line-height: 1.5;
+	color: var(--foreground, var(--sl-color-white));
+}
+
+.ot-compare-steps li:last-child {
+	padding-bottom: 0;
+}
+
+/* timeline dot */
+.ot-compare-steps li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0.28rem;
+	width: 0.55rem;
+	height: 0.55rem;
+	border-radius: 50%;
+	background: color-mix(in oklab, var(--foreground) 32%, transparent);
+}
+
+/* spine segment between dots */
+.ot-compare-steps li:not(:last-child)::after {
+	content: '';
+	position: absolute;
+	left: calc(0.275rem - 0.5px);
+	top: 0.95rem;
+	bottom: -0.28rem;
+	width: 1px;
+	background: color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+.ot-compare-col-after .ot-compare-steps li::before {
+	background: var(--ot-green-semantic);
+}
+
+.ot-compare-col-after .ot-compare-steps li:not(:last-child)::after {
+	background: color-mix(in oklab, var(--ot-green-semantic) 32%, transparent);
+}
+
+.ot-compare-outcome {
+	display: flex;
+	gap: 0.65rem;
+	align-items: flex-start;
+	margin: 1.5rem 0 0;
+	padding-top: 1.4rem;
+	border-top: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+	font-size: 0.9rem;
+	line-height: 1.55;
+}
+
+.ot-compare-outcome svg {
+	flex: none;
+	width: 1.05rem;
+	height: 1.05rem;
+	margin-top: 0.12rem;
+}
+
+.ot-compare-lingers {
+	color: var(--muted-foreground, var(--sl-color-gray-3));
+}
+
+.ot-compare-clean {
+	color: var(--ot-green-semantic);
+}
