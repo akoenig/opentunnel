@@ -910,3 +910,24 @@ site-search #starlight__search .pagefind-ui__result-nested:focus-within {
 .ot-compare-clean {
 	color: var(--ot-green-semantic);
 }
+
+/* ---------------------------------------------------------------------------
+ * Mobile wordmark. The lucode theme hides the site-title wrapper below 768px
+ * and the wordmark text below 1024px, so on phones only the hamburger shows
+ * and the OpenTunnel brand disappears. Show the wordmark in the header at all
+ * sizes; the nav links stay in the hamburger menu until desktop.
+ * ------------------------------------------------------------------------ */
+
+.site-title .title-text {
+	display: inline-block !important;
+}
+
+@media (max-width: 1023px) {
+	.site-title-wrapper {
+		display: flex !important;
+	}
+
+	.site-title-wrapper .nav-bar {
+		display: none !important;
+	}
+}
