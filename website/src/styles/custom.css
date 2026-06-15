@@ -858,10 +858,11 @@ site-search #starlight__search .pagefind-ui__result-nested:focus-within {
 	content: '';
 	position: absolute;
 	left: 0;
-	top: 0.28rem;
-	width: 0.55rem;
-	height: 0.55rem;
-	border-radius: 50%;
+	top: 0.3rem;
+	width: 10px;
+	height: 10px;
+	aspect-ratio: 1;
+	border-radius: 999px;
 	background: color-mix(in oklab, var(--foreground) 32%, transparent);
 }
 
@@ -869,9 +870,9 @@ site-search #starlight__search .pagefind-ui__result-nested:focus-within {
 .ot-compare-steps li:not(:last-child)::after {
 	content: '';
 	position: absolute;
-	left: calc(0.275rem - 0.5px);
-	top: 0.95rem;
-	bottom: -0.28rem;
+	left: 4.5px;
+	top: 1.1rem;
+	bottom: -0.3rem;
 	width: 1px;
 	background: color-mix(in oklab, var(--foreground) 14%, transparent);
 }
