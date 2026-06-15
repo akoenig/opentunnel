@@ -40,6 +40,26 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'OpenTunnel',
+			head: [
+				{
+					// Accessibility polish for the vendored lucode mobile drawer
+					// (parts/Drawer.astro), which we don't edit directly:
+					//  - its overlay and drag-handle buttons have no text, so give
+					//    them an accessible name;
+					//  - its group labels are <h4>, which skips a level after the
+					//    page's <h2> sections. Promote them to <h2> (the CSS in
+					//    custom.css pins the size so nothing moves).
+					tag: 'script',
+					content:
+						"addEventListener('DOMContentLoaded',function(){" +
+						"var d=document.getElementById('drawer');if(!d)return;" +
+						"d.querySelectorAll('.sheet-overlay,.drag-icon').forEach(function(b){" +
+						"if(!b.getAttribute('aria-label'))b.setAttribute('aria-label','Close menu');});" +
+						"d.querySelectorAll('.links-docs h4.entry-title').forEach(function(h){" +
+						"var n=document.createElement('h2');n.className=h.className;" +
+						"n.innerHTML=h.innerHTML;h.replaceWith(n);});});",
+				},
+			],
 			expressiveCode: {
 				styleOverrides: {
 					frames: {

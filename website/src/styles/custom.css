@@ -329,7 +329,8 @@ pre,
 }
 
 .ot-dim {
-	color: #6e7681;
+	/* Lightened from #6e7681 to clear WCAG AA (4.5:1) on the #0d1117 terminal. */
+	color: #7d8590;
 }
 
 /* More air between the hero copy and the example panes. */
@@ -459,7 +460,12 @@ pre,
 
 .ot-toolcall-head .ot-via {
 	font-weight: 400;
-	color: var(--muted-foreground, var(--sl-color-gray-3));
+	/*
+	 * Theme-adaptive muted label. Mixing the foreground at 64% keeps it dim
+	 * while clearing WCAG AA (4.5:1) against the chat background in both the
+	 * light and dark themes, where a fixed gray would fail on one of them.
+	 */
+	color: color-mix(in oklab, var(--foreground) 64%, transparent);
 }
 
 .ot-toolcall code {
@@ -930,4 +936,13 @@ site-search #starlight__search .pagefind-ui__result-nested:focus-within {
 	.site-title-wrapper .nav-bar {
 		display: none !important;
 	}
+}
+
+/* Mobile drawer: accessibility fixes (see the head script in astro.config.mjs)
+ * --------------------------------------------------------------------------
+ * The drawer's group labels are promoted from <h4> to <h2> at runtime so the
+ * document heading order never skips a level. Pin the size back to the <h4>
+ * rendering (1rem) so the promotion is purely semantic, with no visual change. */
+#drawer .links-docs .entry-title {
+	font-size: 1rem;
 }
