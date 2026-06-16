@@ -13,16 +13,25 @@ hero:
   tagline: OpenTunnel lets your AI agent run commands on remote machines as if it were sitting right there, through an ephemeral, end-to-end encrypted tunnel. No SSH, no accounts, no standing access. Ctrl+C and it's gone.
   image:
     html: |
-      <div class="ot-flow" aria-hidden="true">
-        <div class="ot-terminal">
+      <div class="ot-flow">
+        <div class="ot-terminal" aria-hidden="true">
           <div class="ot-terminal-bar"><span></span><span></span><span></span><em>1 · on the remote machine</em></div>
           <pre><code><span class="ot-prompt">$</span> curl -fsSL https://opentunnel.sh | sh
 
       I opened an OpenTunnel session for you.
       <span class="ot-dim">Session active. Press Ctrl+C to revoke access.</span></code></pre>
         </div>
-        <div class="ot-connector"><span>paste the printed prompt into your agent</span></div>
-        <div class="ot-chat">
+        <div class="ot-connector">
+          <span class="ot-reveal-wrap">
+            <button type="button" class="ot-reveal" popovertarget="ot-prompt">
+              <svg class="ot-reveal-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span class="ot-reveal-label">paste the printed prompt into your agent</span>
+              <svg class="ot-reveal-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <span class="ot-reveal-tip" aria-hidden="true">See the full prompt</span>
+          </span>
+        </div>
+        <div class="ot-chat" aria-hidden="true">
           <div class="ot-chat-bar"><span class="ot-chat-status"></span><em>2 · in your agent</em></div>
           <div class="ot-chat-body">
             <div class="ot-msg-user">Staging is down. Can you take a look?</div>
@@ -34,6 +43,41 @@ hero:
               <p>Caddy had stopped on staging. I restarted it and the site is reachable again.</p>
             </div>
           </div>
+        </div>
+        <div id="ot-prompt" popover class="ot-prompt-pop" aria-label="Example of the prompt OpenTunnel prints on the remote machine">
+          <div class="ot-prompt-bar">
+            <span></span><span></span><span></span>
+            <em>example output (not a real invite)</em>
+            <button type="button" class="ot-prompt-close" popovertarget="ot-prompt" popovertargetaction="hide" aria-label="Close example"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+          </div>
+          <div class="ot-prompt-scroll">
+            <pre><code>I opened an OpenTunnel session for you.
+
+      Run commands on my host with:
+
+      curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<span class="ot-dim">ot1_example-invite</span>' sh -s -- exec \
+        -- '&lt;COMMAND&gt;'
+
+      Start with:
+
+      curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<span class="ot-dim">ot1_example-invite</span>' sh -s -- exec \
+        -- 'hostname &amp;&amp; uname -a &amp;&amp; pwd'
+
+      Commands execute without per-command approval while this foreground session is running.
+      Always ask me to confirm before running anything destructive or irreversible, for example deleting files or directories, overwriting data, changing system, package, or network configuration, or moving data off the machine.
+      Treat the invite as bearer-secret material. Do not copy it into shared logs, tickets, summaries, or long-lived notes. The host owner can revoke access with Ctrl+C.
+
+      Notes:
+      - For shared machines, prefer --invite-stdin or shell-history controls because typed environment assignments can still be saved by your shell.
+      - Use non-interactive commands.
+      - No PTY or interactive stdin is available in the first major version.
+      - Avoid sudo unless it is passwordless and non-interactive.
+      - Avoid long-running commands unless necessary.
+      - Only one client can connect to this tunnel at a time.
+      - Only one command runs at a time.
+      - The temporary OpenTunnel CLI is cached in the system temp directory during the session.</code></pre>
+          </div>
+          <p class="ot-prompt-foot">Illustration only. Your machine prints this with a unique invite when you run the command. Paste <em>that</em> output into your agent, not this example.</p>
         </div>
       </div>
   actions:

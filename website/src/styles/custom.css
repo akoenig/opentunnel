@@ -357,15 +357,356 @@ pre,
 	background: color-mix(in oklab, var(--foreground) 18%, transparent);
 }
 
-.ot-connector span {
+/* Reveal pill: a button that opens the full printed prompt in a popover.
+   The "A2" border beam is a conic gradient rotated behind the pill and
+   clipped to a thin ring by a centre mask. Prompt text mirrors the CLI's
+   writeCreateReady output in cmd/opentunnel/main.go; keep them in sync. */
+.ot-connector .ot-reveal {
+	--ot-pill-bg: color-mix(in oklab, var(--foreground) 4%, var(--background));
+	--ot-beam-color: var(--ot-green-semantic);
+	--ot-beam-speed: 5.5s;
+	--ot-beam-thickness: 1px;
 	position: relative;
+	overflow: hidden;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin: 0;
+	font: inherit;
 	font-size: 0.7rem;
 	letter-spacing: 0.02em;
 	color: var(--muted-foreground, var(--sl-color-gray-3));
-	background: var(--background, var(--sl-color-bg));
-	border: 1px solid color-mix(in oklab, var(--foreground) 14%, transparent);
+	background: var(--ot-pill-bg);
+	border: 0;
 	border-radius: 999px;
-	padding: 0.25rem 0.75rem;
+	padding: 0.3rem 0.8rem;
+	cursor: pointer;
+	box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent);
+	transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.ot-connector .ot-reveal:hover {
+	--ot-pill-bg: color-mix(in oklab, var(--foreground) 9%, var(--background));
+	color: var(--foreground, var(--sl-color-white));
+}
+
+.ot-connector .ot-reveal:focus-visible {
+	outline: 2px solid var(--ot-beam-color);
+	outline-offset: 3px;
+}
+
+/* Tight wrapper so the tooltip anchors to the pill, not the padded connector. */
+.ot-reveal-wrap {
+	position: relative;
+	display: inline-flex;
+}
+
+.ot-reveal-label {
+	position: relative;
+	z-index: 2;
+}
+
+.ot-reveal-icon {
+	position: relative;
+	z-index: 2;
+	inline-size: 0.78rem;
+	block-size: 0.78rem;
+	opacity: 0.75;
+	flex: none;
+}
+
+.ot-reveal-caret {
+	position: relative;
+	z-index: 2;
+	inline-size: 0.7rem;
+	block-size: 0.7rem;
+	margin-inline-start: 0.05rem;
+	opacity: 0.55;
+	flex: none;
+	transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.ot-connector .ot-reveal:hover .ot-reveal-caret {
+	opacity: 0.85;
+	transform: translateY(1px);
+}
+
+/* Hover/focus tooltip, hosted on the connector so it can escape the
+   pill's overflow clip. */
+.ot-reveal-tip {
+	position: absolute;
+	inset-block-start: 100%;
+	inset-inline-start: 50%;
+	z-index: 10;
+	margin-block-start: 0.2rem;
+	padding: 0.22rem 0.5rem;
+	border-radius: 7px;
+	background: var(--foreground, var(--sl-color-white));
+	color: var(--background, var(--sl-color-bg));
+	font-size: 0.66rem;
+	letter-spacing: 0.01em;
+	white-space: nowrap;
+	opacity: 0;
+	translate: -50% -4px;
+	pointer-events: none;
+	transition: opacity 0.15s ease, translate 0.15s ease;
+}
+
+.ot-reveal-tip::after {
+	content: '';
+	position: absolute;
+	inset-block-end: 100%;
+	inset-inline-start: 50%;
+	translate: -50% 1px;
+	border: 4px solid transparent;
+	border-block-end-color: var(--foreground, var(--sl-color-white));
+}
+
+.ot-connector .ot-reveal:hover ~ .ot-reveal-tip,
+.ot-connector .ot-reveal:focus-visible ~ .ot-reveal-tip {
+	opacity: 1;
+	translate: -50% 0;
+}
+
+/* Hide the tip while the example is open. */
+.ot-flow:has(.ot-prompt-pop:popover-open) .ot-reveal-tip {
+	opacity: 0;
+}
+
+/* The rotating glint. */
+.ot-reveal::before {
+	content: '';
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	inline-size: 320%;
+	aspect-ratio: 1;
+	translate: -50% -50%;
+	background: conic-gradient(transparent 0 78%, var(--ot-beam-color) 90%, transparent 100%);
+	animation: ot-beam-spin var(--ot-beam-speed) linear infinite;
+	z-index: 0;
+}
+
+/* Centre mask leaves only the border ring lit. */
+.ot-reveal::after {
+	content: '';
+	position: absolute;
+	inset: var(--ot-beam-thickness);
+	border-radius: inherit;
+	background: var(--ot-pill-bg);
+	z-index: 1;
+}
+
+@keyframes ot-beam-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Full-prompt reveal as a speech bubble anchored to the pill.
+   Popover API drives open/close + light-dismiss; CSS anchor positioning
+   places the bubble under the pill with a tail. Browsers without anchor
+   positioning (currently Firefox) fall back to a centred, non-modal card. */
+.ot-prompt-pop {
+	display: flex;
+	flex-direction: column;
+	inline-size: min(540px, 92vw);
+	max-block-size: min(58vh, 500px);
+	margin: auto;                 /* fallback: centred when not anchored */
+	padding: 0;
+	/* Same window language as the hero terminal: dark in both colour schemes. */
+	border: 1px solid #2a2f37;
+	border-radius: 0.75rem;
+	background: #0d1117;
+	color: #c9d1d9;
+	box-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 22px 60px -22px rgb(0 0 0 / 0.6);
+	opacity: 0;
+	scale: 0.96;
+	transform-origin: top center;
+	transition: opacity 0.18s ease, scale 0.18s ease, overlay 0.18s allow-discrete, display 0.18s allow-discrete;
+}
+
+.ot-prompt-pop:popover-open {
+	opacity: 1;
+	scale: 1;
+}
+
+@starting-style {
+	.ot-prompt-pop:popover-open {
+		opacity: 0;
+		scale: 0.96;
+	}
+}
+
+/* No dimmed backdrop: this is a bubble, not a modal. Light-dismiss still works. */
+.ot-prompt-pop::backdrop {
+	background: transparent;
+}
+
+/* Anchored speech-bubble placement + tail (progressive enhancement). */
+@supports (anchor-name: --ot-pill) {
+	.ot-connector .ot-reveal {
+		anchor-name: --ot-pill;
+	}
+
+	.ot-prompt-pop {
+		position-anchor: --ot-pill;
+		inset: auto;
+		margin: 0;
+		top: anchor(bottom);
+		justify-self: anchor-center;
+		margin-block-start: 0.7rem;
+	}
+
+	/* Tail pointing up at the pill, matching the terminal window. */
+	.ot-prompt-pop::after {
+		content: '';
+		position: absolute;
+		inset-block-start: -6px;
+		inset-inline-start: 50%;
+		inline-size: 11px;
+		block-size: 11px;
+		translate: -50% 0;
+		rotate: 45deg;
+		background: #0d1117;
+		border-inline-start: 1px solid #2a2f37;
+		border-block-start: 1px solid #2a2f37;
+	}
+}
+
+/* Title bar: three dots + label, like the hero terminal mock. */
+.ot-prompt-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	flex: none;
+	padding: 0.55rem 0.85rem;
+	border-bottom: 1px solid #2a2f37;
+}
+
+.ot-prompt-bar > span {
+	width: 0.65rem;
+	height: 0.65rem;
+	border-radius: 50%;
+	background: #3a4048;
+}
+
+.ot-prompt-bar em {
+	margin-inline-start: 0.5rem;
+	font-style: normal;
+	font-size: var(--sl-text-xs);
+	letter-spacing: 0.02em;
+	color: #8b949e;
+}
+
+.ot-prompt-close {
+	flex: none;
+	margin-inline-start: auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	padding: 0;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: #8b949e;
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ot-prompt-close:hover {
+	background: #1b2027;
+	color: #c9d1d9;
+}
+
+.ot-prompt-close:focus-visible {
+	outline: 2px solid var(--ot-green-semantic);
+	outline-offset: 2px;
+}
+
+.ot-prompt-close svg {
+	inline-size: 0.85rem;
+	block-size: 0.85rem;
+}
+
+/* Scrollable body with a quiet, themed scrollbar. */
+.ot-prompt-scroll {
+	flex: 1 1 auto;
+	min-block-size: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: #3a4048 transparent;
+}
+
+.ot-prompt-scroll::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+.ot-prompt-scroll::-webkit-scrollbar-thumb {
+	background: #3a4048;
+	border-radius: 999px;
+	border: 3px solid #0d1117;
+}
+
+.ot-prompt-scroll::-webkit-scrollbar-thumb:hover {
+	background: #4a525c;
+}
+
+.ot-prompt-scroll::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.ot-prompt-pop pre {
+	margin: 0;
+	padding: 0.95rem 1.1rem 1.1rem;
+	background: transparent;
+	border: 0;
+	font-size: var(--sl-text-xs);
+	line-height: 1.7;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.ot-prompt-pop code {
+	background: transparent;
+	color: #c9d1d9;
+	font-family: var(--sl-font-mono), monospace;
+}
+
+/* Footer disclaimer: this is an illustration, not a usable prompt. */
+.ot-prompt-foot {
+	flex: none;
+	margin: 0;
+	padding: 0.7rem 1.1rem 0.8rem;
+	border-top: 1px solid #2a2f37;
+	font-size: 0.72rem;
+	line-height: 1.5;
+	color: #8b949e;
+}
+
+.ot-prompt-foot em {
+	font-style: italic;
+	color: #c9d1d9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ot-reveal::before {
+		display: none;
+		animation: none;
+	}
+
+	.ot-reveal {
+		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 26%, transparent);
+	}
+
+	.ot-prompt-pop,
+	.ot-prompt-pop::backdrop {
+		transition: none;
+	}
 }
 
 /* Agent chat card: follows the page color scheme, like a real chat app. */
