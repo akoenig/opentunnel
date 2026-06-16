@@ -167,6 +167,7 @@ func TestWriteCreateReadyPrintsPublicAgentPrompt(t *testing.T) {
 		"curl -fsSL http://localhost:8080/cli | OPENTUNNEL_INVITE='" + invite + "' sh -s -- exec \\",
 		"  -- 'hostname && uname -a && pwd'",
 		"Commands execute without per-command approval while this foreground session is running.",
+		"Always ask me to confirm before running anything destructive or irreversible, for example deleting files or directories, overwriting data, changing system, package, or network configuration, or moving data off the machine.",
 		"Treat the invite as bearer-secret material.",
 		"The host owner can revoke access with Ctrl+C.",
 		"For shared machines, prefer --invite-stdin or shell-history controls because typed environment assignments can still be saved by your shell.",

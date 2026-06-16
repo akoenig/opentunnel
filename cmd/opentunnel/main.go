@@ -232,12 +232,19 @@ func (cmd createCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wr
 	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 
-	session, err := tunnel.StartHost(signalCtx, tunnel.HostConfig{RelayURL: relayURL, LogWriter: stderr})
+	ready := make(chan struct{})
+	session, err := tunnel.StartHost(signalCtx, tunnel.HostConfig{RelayURL: relayURL, LogWriter: stderr, Ready: ready})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "create: %v\n", err)
 		return 1
 	}
 	writeCreateReady(stdout, session.Invite, cmd.relayURL)
+	// Keep the agent prompt (stdout) cleanly separable from the session log
+	// (stderr) so the user can select and copy the prompt without log noise.
+	// Closing ready only after the divider is written guarantees the prompt
+	// prints before the first log line instead of racing it.
+	_, _ = fmt.Fprint(stderr, "\n\n──── session log below; not part of the message above ────\n\n")
+	close(ready)
 
 	select {
 	case <-signalCtx.Done():
@@ -266,6 +273,7 @@ curl -fsSL %[1]s/cli | OPENTUNNEL_INVITE='%[2]s' sh -s -- exec \
   -- 'hostname && uname -a && pwd'
 
 Commands execute without per-command approval while this foreground session is running.
+Always ask me to confirm before running anything destructive or irreversible, for example deleting files or directories, overwriting data, changing system, package, or network configuration, or moving data off the machine.
 Treat the invite as bearer-secret material. Do not copy it into shared logs, tickets, summaries, or long-lived notes. The host owner can revoke access with Ctrl+C.
 
 Notes:
