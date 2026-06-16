@@ -13,7 +13,7 @@ No SSH, no accounts, no standing access. Ctrl+C and it's gone.
 
 [opentunnel.sh](https://opentunnel.sh) · [Getting Started](https://opentunnel.sh/getting-started/) · [How It Works](https://opentunnel.sh/concepts/how-it-works/) · [Security Model](https://opentunnel.sh/concepts/security-model/) · [Self-Hosting](https://opentunnel.sh/guides/self-hosting/)
 
-<video src="https://github.com/akoenig/opentunnel/raw/main/demo.mp4" controls muted playsinline width="760"></video>
+<video src="https://github.com/user-attachments/assets/826475e0-362c-45dc-8229-8861fa399cd7" controls muted playsinline width="760"></video>
 
 </div>
 
