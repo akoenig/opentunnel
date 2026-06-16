@@ -13,8 +13,6 @@ No SSH, no accounts, no standing access. Ctrl+C and it's gone.
 
 [opentunnel.sh](https://opentunnel.sh) · [Getting Started](https://opentunnel.sh/getting-started/) · [How It Works](https://opentunnel.sh/concepts/how-it-works/) · [Security Model](https://opentunnel.sh/concepts/security-model/) · [Self-Hosting](https://opentunnel.sh/guides/self-hosting/)
 
-<video src="https://github.com/user-attachments/assets/09c01af3-a190-4f63-a642-d5dd902f3562" controls muted playsinline width="760"></video>
-
 </div>
 
 ---
@@ -24,6 +22,12 @@ No SSH, no accounts, no standing access. Ctrl+C and it's gone.
 Agents are brilliant on the machine they run on. The moment the task lives on another machine, they hit a wall of SSH keys, firewall rules, and standing credentials. Permanent infrastructure for a temporary need.
 
 OpenTunnel removes the wall without creating permanent access. You start one foreground process on the remote machine and paste the printed prompt into your agent. From then on, the agent runs commands there like any other tool call: stdout, stderr, and the real exit code come back as if the machine were local. When the task is done, you press Ctrl+C. The session ends, the invite expires, and no trace of the access remains.
+
+<div align="center">
+
+<video src="https://github.com/user-attachments/assets/09c01af3-a190-4f63-a642-d5dd902f3562" controls muted playsinline width="760"></video>
+
+</div>
 
 ## Three steps, zero infrastructure
 
