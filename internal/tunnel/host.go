@@ -40,6 +40,10 @@ type HostConfig struct {
 	IdleTimeout    time.Duration
 	MaxOutputBytes int
 	LogWriter      io.Writer
+	// Ready, when non-nil, makes the session withhold its first log line until
+	// the channel is closed. Callers use it to print the agent prompt before any
+	// log output appears, keeping the two visually separable.
+	Ready <-chan struct{}
 }
 
 type HostSession struct {
@@ -60,6 +64,7 @@ type hostRuntime struct {
 	logger         *hostLogger
 	endpoint       string
 	header         http.Header
+	ready          <-chan struct{}
 }
 
 func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
@@ -113,6 +118,7 @@ func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
 		logger:         &logger,
 		endpoint:       endpoint,
 		header:         header,
+		ready:          cfg.Ready,
 	}
 	go runtime.run(ctx, done)
 
@@ -120,6 +126,14 @@ func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
 }
 
 func (h *hostRuntime) run(ctx context.Context, done chan<- error) {
+	if h.ready != nil {
+		select {
+		case <-h.ready:
+		case <-ctx.Done():
+			close(done)
+			return
+		}
+	}
 	h.logger.log("sessionOpen")
 	defer func() {
 		h.logger.log("sessionClose")
