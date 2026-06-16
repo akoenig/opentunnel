@@ -18,7 +18,7 @@ const (
 
 func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 	script, err := RenderBootstrap(BootstrapConfig{
-		RelayOrigin: "http://relay.example",
+		RelayOrigin: "https://relay.example",
 		Version:     "dev",
 		Artifacts: []BootstrapArtifact{
 			{PlatformKey: "linux-amd64", Checksum: linuxAMD64Checksum},
@@ -32,7 +32,7 @@ func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 	}
 
 	wants := []string{
-		"relay_origin='http://relay.example'",
+		"relay_origin='https://relay.example'",
 		"os_name=$(uname -s)",
 		"arch_name=$(uname -m)",
 		"platform=linux-amd64",
@@ -76,19 +76,19 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 		},
 		{
 			name: "version",
-			cfg:  BootstrapConfig{RelayOrigin: "http://relay.example", Artifacts: validBootstrapArtifactsForTest()},
+			cfg:  BootstrapConfig{RelayOrigin: "https://relay.example", Artifacts: validBootstrapArtifactsForTest()},
 		},
 		{
 			name: "artifacts",
 			cfg: BootstrapConfig{
-				RelayOrigin: "http://relay.example",
+				RelayOrigin: "https://relay.example",
 				Version:     "dev",
 			},
 		},
 		{
 			name: "unsupported platform",
 			cfg: BootstrapConfig{
-				RelayOrigin: "http://relay.example",
+				RelayOrigin: "https://relay.example",
 				Version:     "dev",
 				Artifacts:   []BootstrapArtifact{{PlatformKey: "freebsd-amd64", Checksum: linuxAMD64Checksum}},
 			},
@@ -96,7 +96,7 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 		{
 			name: "checksum",
 			cfg: BootstrapConfig{
-				RelayOrigin: "http://relay.example",
+				RelayOrigin: "https://relay.example",
 				Version:     "dev",
 				Artifacts: []BootstrapArtifact{
 					{PlatformKey: "linux-amd64", Checksum: ""},
@@ -109,7 +109,7 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 		{
 			name: "missing supported platform",
 			cfg: BootstrapConfig{
-				RelayOrigin: "http://relay.example",
+				RelayOrigin: "https://relay.example",
 				Version:     "dev",
 				Artifacts: []BootstrapArtifact{
 					{PlatformKey: "linux-amd64", Checksum: linuxAMD64Checksum},
@@ -121,7 +121,7 @@ func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 		{
 			name: "duplicate platform",
 			cfg: BootstrapConfig{
-				RelayOrigin: "http://relay.example",
+				RelayOrigin: "https://relay.example",
 				Version:     "dev",
 				Artifacts: []BootstrapArtifact{
 					{PlatformKey: "linux-amd64", Checksum: linuxAMD64Checksum},
@@ -160,7 +160,7 @@ func TestRenderBootstrapRejectsInvalidChecksums(t *testing.T) {
 			artifacts := validBootstrapArtifactsForTest()
 			artifacts[0].Checksum = tt.checksum
 			_, err := RenderBootstrap(BootstrapConfig{
-				RelayOrigin: "http://relay.example",
+				RelayOrigin: "https://relay.example",
 				Version:     "dev",
 				Artifacts:   artifacts,
 			})
@@ -179,10 +179,11 @@ func TestRenderBootstrapRejectsInvalidRelayOrigins(t *testing.T) {
 		name        string
 		relayOrigin string
 	}{
-		{name: "leading dash", relayOrigin: "-http://relay.example"},
+		{name: "leading dash", relayOrigin: "-https://relay.example"},
 		{name: "missing scheme", relayOrigin: "relay.example"},
 		{name: "missing host", relayOrigin: "https://"},
 		{name: "non http scheme", relayOrigin: "file://relay.example"},
+		{name: "non-local http", relayOrigin: "http://relay.example"},
 		{name: "path", relayOrigin: "https://relay.example/cli"},
 		{name: "query", relayOrigin: "https://relay.example?token=abc"},
 		{name: "fragment", relayOrigin: "https://relay.example#cli"},
@@ -340,7 +341,7 @@ func TestRenderBootstrapDoesNotExecuteCommandSubstitutionInArtifactCoordinates(t
 			runDir := t.TempDir()
 			marker := filepath.Join(runDir, "command-substitution-executed")
 			script, err := RenderBootstrap(BootstrapConfig{
-				RelayOrigin: "http://relay.example",
+				RelayOrigin: "https://relay.example",
 				Version:     strings.ReplaceAll(tt.version, "MARKER", marker),
 				Artifacts:   validBootstrapArtifactsForTest(),
 			})
@@ -527,7 +528,7 @@ func uidForTest() string {
 func renderBootstrapForTest(t *testing.T) string {
 	t.Helper()
 	script, err := RenderBootstrap(BootstrapConfig{
-		RelayOrigin: "http://relay.example",
+		RelayOrigin: "https://relay.example",
 		Version:     "dev",
 		Artifacts:   validBootstrapArtifactsForTest(),
 	})

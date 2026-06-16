@@ -41,7 +41,7 @@ For supervisors and load balancers, `--health-listen` starts a separate private 
 
 Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-relay.env.example` as copyable examples. Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_DIR` points to the compatible artifacts served by `/cli`.
 
-TLS is normally terminated by a reverse proxy or load balancer in front of the relay.
+TLS is normally terminated by a reverse proxy or load balancer in front of the relay. Public relay origins must use HTTPS; HTTP is accepted only for localhost and loopback development origins.
 
 For `/tunnel` WebSockets, proxies and load balancers must preserve `OpenTunnel-Role` and `OpenTunnel-Session` headers. Proxies and WAFs must not inject an `Origin` header into CLI tunnel requests because the relay rejects non-empty `Origin`.
 

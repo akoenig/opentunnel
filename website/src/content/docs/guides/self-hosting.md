@@ -21,7 +21,7 @@ docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 \
   relay --public-url https://relay.example.com
 ```
 
-Terminate TLS in front of the relay with your normal reverse proxy or load balancer. The `--public-url` value is embedded into the `/cli` bootstrapper, so it must match the public origin exactly.
+Terminate TLS in front of the relay with your normal reverse proxy or load balancer. The `--public-url` value is embedded into the `/cli` bootstrapper, so it must match the public origin exactly. Public origins must use HTTPS; HTTP is accepted only for localhost and loopback development origins.
 
 That's the whole deployment. Users on your relay then run:
 

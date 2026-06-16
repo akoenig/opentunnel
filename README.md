@@ -76,7 +76,7 @@ Sessions started from your origin print agent prompts that point there automatic
 curl -fsSL https://relay.example.com/cli | sh -s -- create
 ```
 
-Prefer immutable version tags in production; `latest` moves with each release. The [self-hosting guide](https://opentunnel.sh/guides/self-hosting/) and [relay operations](https://opentunnel.sh/guides/relay-operations/) cover TLS termination, systemd, upgrades, and deployment verification.
+Prefer immutable version tags in production; `latest` moves with each release. Public relay origins must use HTTPS; HTTP is accepted only for localhost and loopback development origins. The [self-hosting guide](https://opentunnel.sh/guides/self-hosting/) and [relay operations](https://opentunnel.sh/guides/relay-operations/) cover TLS termination, systemd, upgrades, and deployment verification.
 
 ## Deliberately small
 

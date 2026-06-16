@@ -165,7 +165,7 @@ func TestUnknownCLIArtifactPathReturnsNotFound(t *testing.T) {
 		t.Fatalf("write extra file: %v", err)
 	}
 	server, err := NewServerWithOptions(ServerOptions{
-		PublicURL:   "http://relay.example.com",
+		PublicURL:   "https://relay.example.com",
 		Version:     version,
 		ArtifactDir: artifactDir,
 	})

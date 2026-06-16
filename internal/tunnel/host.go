@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -401,6 +403,17 @@ func sendError(channel *securechannel.Channel, writeMessage func(int, []byte) er
 	return nil
 }
 
+func isLocalHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	return addr.IsLoopback()
+}
+
 func parseRelayURL(raw string) (*url.URL, error) {
 	if raw == "" {
 		return nil, fmt.Errorf("relay url is required")
@@ -414,6 +427,12 @@ func parseRelayURL(raw string) (*url.URL, error) {
 	}
 	if relayURL.Host == "" {
 		return nil, fmt.Errorf("relay url host is required")
+	}
+	if relayURL.Scheme == "ws" && !isLocalHost(relayURL.Hostname()) {
+		return nil, fmt.Errorf("relay url must use wss unless the host is localhost or loopback")
+	}
+	if relayURL.User != nil || relayURL.RawQuery != "" || relayURL.Fragment != "" {
+		return nil, fmt.Errorf("relay url must not include userinfo, query, or fragment")
 	}
 	return relayURL, nil
 }

@@ -2,9 +2,11 @@ package originurl
 
 import "testing"
 
-func TestValidateAcceptsHTTPOrigins(t *testing.T) {
+func TestValidateAcceptsSecureAndLocalHTTPOrigins(t *testing.T) {
 	tests := []string{
 		"http://localhost:8080",
+		"http://127.0.0.1:8080",
+		"http://[::1]:8080",
 		"https://relay.example.com",
 		"https://[::1]:8443",
 	}
@@ -25,6 +27,7 @@ func TestValidateRejectsUnsafeOrigins(t *testing.T) {
 		"http://example.test?download=true",
 		"http://example.test#fragment",
 		"http://user@example.test",
+		"http://example.test",
 		"ftp://example.test",
 		"http:///missing-host",
 		"-http://example.test",
