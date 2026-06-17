@@ -24,6 +24,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now opentunnel-relay.service
 ```
 
-The service runs as the unprivileged `opentunnel` system user. Edit `/etc/opentunnel/relay.env` before starting the service. Set `OPENTUNNEL_PUBLIC_URL` to the HTTPS origin users will fetch. `OPENTUNNEL_ARTIFACT_DIR` points to the directory of release artifacts served by `/cli/bin/...`, separate from the `/usr/local/bin/opentunnel` service binary.
+The service runs as the unprivileged `opentunnel` system user. Edit `/etc/opentunnel/relay.env` before starting the service. Set `OPENTUNNEL_PUBLIC_URL` to the HTTPS origin users will fetch. `OPENTUNNEL_ARTIFACT_DIR` points to the directory of release artifacts served by `/cli/bin/...`, separate from the `/usr/local/bin/opentunnel` service binary. `OPENTUNNEL_ACTIVITY_LOG_INTERVAL` controls active tunnel logging and accepts a positive Go duration, such as `30s` or `10m`.
 
 TLS is normally terminated by a reverse proxy or load balancer in front of the relay. The hardening settings in the example unit are useful defaults, not a complete security boundary.

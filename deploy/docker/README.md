@@ -35,7 +35,7 @@ docker run --rm -p 8080:8080 opentunnel-relay:dev relay --public-url https://rel
 
 Terminate TLS with a reverse proxy or load balancer in front of the container.
 
-Override relay defaults by passing command arguments, as shown above. The relay does not read `OPENTUNNEL_*` environment variables in Docker.
+Override relay defaults by passing command arguments, as shown above. Set `OPENTUNNEL_ACTIVITY_LOG_INTERVAL` to a Go duration, such as `30s` or `10m`, to change the activity logging interval.
 
 The image includes `/opentunnel-artifacts` with Linux and macOS temporary CLI binaries for `amd64` and `arm64`. The relay serves those binaries from `/cli/bin/...` for bootstrap clients.
 

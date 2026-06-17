@@ -7,7 +7,7 @@ This guide covers the day-2 concerns of running your own relay. If you haven't d
 
 ## Docker
 
-Run the relay with explicit command arguments; the Docker relay does not read `OPENTUNNEL_*` environment variables:
+Run the relay with explicit command arguments:
 
 ```bash
 docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 \
@@ -15,11 +15,11 @@ docker run -p 8080:8080 ghcr.io/akoenig/opentunnel:1.0.0 \
   --public-url https://relay.example.com
 ```
 
-Override any default by passing additional flags (`--listen`, `--artifact-dir`, `--version`).
+Override any default by passing additional flags (`--listen`, `--artifact-dir`, `--version`). Set `OPENTUNNEL_ACTIVITY_LOG_INTERVAL` to a Go duration, such as `30s` or `10m`, to change the activity logging interval.
 
 ## Activity logging
 
-The relay reports the number of active tunnels to stderr every five minutes:
+The relay reports the number of active tunnels to stderr every five minutes by default:
 
 ```text
 relay: active tunnels: 3
@@ -36,7 +36,7 @@ Use the copyable examples from the repository:
 - `deploy/systemd/opentunnel-relay.service`
 - `deploy/systemd/opentunnel-relay.env.example`
 
-Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_DIR` points to the artifacts served by `/cli`. TLS is normally terminated by a reverse proxy or load balancer in front of the relay.
+Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_DIR` points to the artifacts served by `/cli`. Optionally set `OPENTUNNEL_ACTIVITY_LOG_INTERVAL` to a positive Go duration. TLS is normally terminated by a reverse proxy or load balancer in front of the relay.
 
 ## Upgrades and version pinning
 

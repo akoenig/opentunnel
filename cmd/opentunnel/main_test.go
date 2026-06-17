@@ -5,6 +5,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
+
+	relaypkg "opentunnel/internal/relay"
 )
 
 func TestParseArgsRelay(t *testing.T) {
@@ -41,7 +44,7 @@ func TestParseArgsRelayRequiresPublicURL(t *testing.T) {
 	}
 }
 
-func TestParseArgsRelayDefaultsArtifactDirAndVersion(t *testing.T) {
+func TestParseArgsRelayDefaultsArtifactDirVersionAndActivityLogInterval(t *testing.T) {
 	cmd, err := parseArgs([]string{"relay", "--public-url", "https://relay.example.com"})
 	if err != nil {
 		t.Fatalf("parseArgs() error = %v", err)
@@ -56,6 +59,50 @@ func TestParseArgsRelayDefaultsArtifactDirAndVersion(t *testing.T) {
 	}
 	if relay.version != "dev" {
 		t.Fatalf("relay.version = %q, want %q", relay.version, "dev")
+	}
+	if relay.activityLogInterval != relaypkg.ActiveTunnelLogInterval {
+		t.Fatalf("relay.activityLogInterval = %v, want %v", relay.activityLogInterval, relaypkg.ActiveTunnelLogInterval)
+	}
+}
+
+func TestParseArgsRelayUsesActivityLogIntervalFromEnvironment(t *testing.T) {
+	t.Setenv(activityLogIntervalEnv, "30s")
+
+	cmd, err := parseArgs([]string{"relay", "--public-url", "https://relay.example.com"})
+	if err != nil {
+		t.Fatalf("parseArgs() error = %v", err)
+	}
+
+	relay, ok := cmd.(relayCommand)
+	if !ok {
+		t.Fatalf("parseArgs() command = %T, want relayCommand", cmd)
+	}
+	if relay.activityLogInterval != 30*time.Second {
+		t.Fatalf("relay.activityLogInterval = %v, want 30s", relay.activityLogInterval)
+	}
+}
+
+func TestParseArgsRelayRejectsInvalidActivityLogIntervalFromEnvironment(t *testing.T) {
+	t.Setenv(activityLogIntervalEnv, "soon")
+
+	_, err := parseArgs([]string{"relay", "--public-url", "https://relay.example.com"})
+	if err == nil {
+		t.Fatal("parseArgs() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), activityLogIntervalEnv) {
+		t.Fatalf("parseArgs() error = %q, want %q", err.Error(), activityLogIntervalEnv)
+	}
+}
+
+func TestParseArgsRelayRejectsNonPositiveActivityLogIntervalFromEnvironment(t *testing.T) {
+	t.Setenv(activityLogIntervalEnv, "0s")
+
+	_, err := parseArgs([]string{"relay", "--public-url", "https://relay.example.com"})
+	if err == nil {
+		t.Fatal("parseArgs() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "greater than zero") {
+		t.Fatalf("parseArgs() error = %q, want greater than zero", err.Error())
 	}
 }
 

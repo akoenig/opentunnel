@@ -23,12 +23,15 @@ type command interface {
 	run(context.Context, io.Writer, io.Writer) int
 }
 
+const activityLogIntervalEnv = "OPENTUNNEL_ACTIVITY_LOG_INTERVAL"
+
 type relayCommand struct {
-	listen       string
-	healthListen string
-	publicURL    string
-	artifactDir  string
-	version      string
+	listen              string
+	healthListen        string
+	publicURL           string
+	artifactDir         string
+	version             string
+	activityLogInterval time.Duration
 }
 
 type createCommand struct {
@@ -77,7 +80,12 @@ func parseArgs(args []string) (command, error) {
 func parseRelayArgs(args []string) (relayCommand, error) {
 	flags := flag.NewFlagSet("relay", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	cmd := relayCommand{listen: ":8080", artifactDir: "/opentunnel-artifacts", version: buildinfo.Version}
+	cmd := relayCommand{
+		listen:              ":8080",
+		artifactDir:         "/opentunnel-artifacts",
+		version:             buildinfo.Version,
+		activityLogInterval: relay.ActiveTunnelLogInterval,
+	}
 	flags.StringVar(&cmd.listen, "listen", ":8080", "HTTP listen address")
 	flags.StringVar(&cmd.healthListen, "health-listen", "", "optional private listen address for the /healthz endpoint")
 	flags.StringVar(&cmd.publicURL, "public-url", "", "public relay URL")
@@ -88,6 +96,16 @@ func parseRelayArgs(args []string) (relayCommand, error) {
 	}
 	if flags.NArg() != 0 {
 		return relayCommand{}, fmt.Errorf("relay got unexpected argument %q", flags.Arg(0))
+	}
+	if value := os.Getenv(activityLogIntervalEnv); value != "" {
+		interval, err := time.ParseDuration(value)
+		if err != nil {
+			return relayCommand{}, fmt.Errorf("relay %s: %w", activityLogIntervalEnv, err)
+		}
+		if interval <= 0 {
+			return relayCommand{}, fmt.Errorf("relay %s must be greater than zero", activityLogIntervalEnv)
+		}
+		cmd.activityLogInterval = interval
 	}
 	if cmd.publicURL == "" {
 		return relayCommand{}, errors.New("relay requires public url")
@@ -177,7 +195,7 @@ func (cmd relayCommand) run(ctx context.Context, stdout io.Writer, stderr io.Wri
 
 	loggingCtx, stopLogging := context.WithCancel(ctx)
 	defer stopLogging()
-	go relayServer.LogActiveTunnels(loggingCtx, relay.ActiveTunnelLogInterval, stderr)
+	go relayServer.LogActiveTunnels(loggingCtx, cmd.activityLogInterval, stderr)
 
 	if cmd.healthListen != "" {
 		healthServer := &http.Server{

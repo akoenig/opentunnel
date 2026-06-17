@@ -31,15 +31,15 @@ docker run --rm -p 8080:8080 opentunnel-relay:dev \
   --public-url http://127.0.0.1:8080
 ```
 
-Override relay defaults by passing command arguments; the Docker relay does not read `OPENTUNNEL_*` environment variables.
+Override relay defaults by passing command arguments. Set `OPENTUNNEL_ACTIVITY_LOG_INTERVAL` to a Go duration, such as `30s` or `10m`, to change the activity logging interval.
 
-The relay reports the number of active tunnels to stderr every five minutes (`relay: active tunnels: 3`). The count is the only thing reported; no sessions, invites, payloads, or client metadata are ever logged.
+The relay reports the number of active tunnels to stderr every five minutes by default (`relay: active tunnels: 3`). The count is the only thing reported; no sessions, invites, payloads, or client metadata are ever logged.
 
 For supervisors and load balancers, `--health-listen` starts a separate private listener serving `GET /healthz` with the same count. It is off by default and is not part of the public endpoint; bind it to an address that is not publicly reachable.
 
 ## systemd Deployment
 
-Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-relay.env.example` as copyable examples. Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_DIR` points to the compatible artifacts served by `/cli`.
+Use `deploy/systemd/opentunnel-relay.service` and `deploy/systemd/opentunnel-relay.env.example` as copyable examples. Edit the environment file so `OPENTUNNEL_PUBLIC_URL` matches the public HTTPS origin and `OPENTUNNEL_ARTIFACT_DIR` points to the compatible artifacts served by `/cli`. Optionally set `OPENTUNNEL_ACTIVITY_LOG_INTERVAL` to a positive Go duration.
 
 TLS is normally terminated by a reverse proxy or load balancer in front of the relay. Public relay origins must use HTTPS; HTTP is accepted only for localhost and loopback development origins.
 
