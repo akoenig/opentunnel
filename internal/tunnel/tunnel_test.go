@@ -777,6 +777,26 @@ func TestEncryptedErrorMessageRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseRelayURLRejectsNonLocalPlainWebSocket(t *testing.T) {
+	_, err := parseRelayURL("ws://relay.example")
+	if err == nil {
+		t.Fatal("parseRelayURL() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "wss") {
+		t.Fatalf("parseRelayURL() error = %q, want wss guidance", err.Error())
+	}
+}
+
+func TestParseRelayURLAcceptsLocalPlainWebSocket(t *testing.T) {
+	for _, raw := range []string{"ws://localhost:8080", "ws://127.0.0.1:8080", "ws://[::1]:8080"} {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := parseRelayURL(raw); err != nil {
+				t.Fatalf("parseRelayURL() error = %v", err)
+			}
+		})
+	}
+}
+
 func relayURL(httpURL string) string {
 	return "ws" + strings.TrimPrefix(httpURL, "http")
 }

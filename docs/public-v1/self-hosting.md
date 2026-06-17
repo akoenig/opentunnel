@@ -26,7 +26,7 @@ For a public relay, set `--public-url` to the HTTPS origin users will fetch:
 docker run -p 8080:8080 opentunnel-relay:dev relay --public-url https://relay.example.com
 ```
 
-Terminate TLS in front of the relay with your normal reverse proxy or load balancer. The relay process expects the public origin to be HTTP or HTTPS and does not require a database or Redis.
+Terminate TLS in front of the relay with your normal reverse proxy or load balancer. The relay accepts HTTP only for localhost and loopback development origins. Public relay origins must use HTTPS. The relay does not require a database or Redis.
 
 For `/tunnel` WebSockets, proxies and load balancers must preserve `OpenTunnel-Role` and `OpenTunnel-Session` headers. Proxies and WAFs must not inject an `Origin` header into CLI tunnel requests because the relay rejects non-empty `Origin`.
 

@@ -2,6 +2,7 @@ package originurl
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strings"
 )
@@ -21,6 +22,9 @@ func Validate(raw string, name string) error {
 	if origin.Host == "" {
 		return fmt.Errorf("%s host is required", name)
 	}
+	if origin.Scheme == "http" && !isLocalHost(origin.Hostname()) {
+		return fmt.Errorf("%s must use https unless the host is localhost or loopback", name)
+	}
 	if origin.User != nil {
 		return fmt.Errorf("%s must not include userinfo", name)
 	}
@@ -31,6 +35,17 @@ func Validate(raw string, name string) error {
 		return fmt.Errorf("%s host contains unsafe characters", name)
 	}
 	return nil
+}
+
+func isLocalHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	return addr.IsLoopback()
 }
 
 func isShellSafeHost(host string) bool {

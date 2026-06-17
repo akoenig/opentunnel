@@ -26,7 +26,7 @@ The relay intentionally rejects WebSocket upgrade requests that include an `Orig
 
 The `/cli` bootstrapper downloads the matching OpenTunnel binary and verifies the same-origin checksum before execution. This detects corruption or mismatched artifacts from the trusted relay origin.
 
-Same-origin checksums are not a strong supply-chain security boundary. If the relay origin or the transport serving `/cli` is compromised, an attacker can change both the bootstrapper and checksum. Use HTTPS and operate the relay origin as trusted infrastructure.
+Same-origin checksums are not a strong supply-chain security boundary. If the relay origin or the transport serving `/cli` is compromised, an attacker can change both the bootstrapper and checksum. Public relay origins must use HTTPS. HTTP is accepted only for localhost and loopback development origins. Operate the relay origin as trusted infrastructure.
 
 ## Execution Semantics
 
