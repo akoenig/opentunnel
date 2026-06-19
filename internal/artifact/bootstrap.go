@@ -39,9 +39,22 @@ func RenderBootstrap(cfg BootstrapConfig) (string, error) {
 
 	script := fmt.Sprintf(`#!/bin/sh
 set -eu
-umask 077
 
-relay_origin=%s
+checksum_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    printf 'opentunnel: sha256sum or shasum is required\n' >&2
+    return 1
+  fi
+}
+
+main() {
+  umask 077
+
+  relay_origin=%s
 version=%s
 os_name=$(uname -s)
 arch_name=$(uname -m)
@@ -84,17 +97,6 @@ tmp_bin="${download_root}/opentunnel.download"
 tmp_checksum="${download_root}/opentunnel.sha256"
 trap 'rm -rf "$download_root"' EXIT HUP INT TERM
 
-checksum_file() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    printf 'opentunnel: sha256sum or shasum is required\n' >&2
-    return 1
-  fi
-}
-
 if [ -f "$bin" ]; then
   if actual_checksum=$(checksum_file "$bin") && [ "$actual_checksum" = "$expected_checksum" ]; then
     export OPENTUNNEL_RELAY_ORIGIN="$relay_origin"
@@ -136,6 +138,9 @@ rm -f "$tmp_checksum"
 
 export OPENTUNNEL_RELAY_ORIGIN="$relay_origin"
 exec "$bin" "$@"
+}
+
+main "$@"
 `, shellQuote(cfg.RelayOrigin), shellQuote(cfg.Version), renderChecksumCases(checksums))
 
 	return script, nil
