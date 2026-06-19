@@ -68,4 +68,4 @@
 ## Commit Conventions
 
 - Write commit subjects in the conventional style used by the history (`feat:`, `fix:`, `chore:`, `docs:`, `ci:`, with optional scopes like `feat(website):`).
-- Do not add AI attribution to commits: no "Generated with" lines and no `Co-Authored-By` trailers. All commits are authored by the repository owner.
+- Do not add AI attribution to commits: no "Generated with" lines and no `Co-Authored-By` trailers. All commits are authored by the repository owner. I don't like cheap advertising and also, code is also partially written by humans, so the AI contribution feels off.
