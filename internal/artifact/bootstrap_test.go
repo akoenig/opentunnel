@@ -65,6 +65,39 @@ func TestRenderBootstrapRendersPOSIXBootstrapScript(t *testing.T) {
 	}
 }
 
+func TestRenderBootstrapWrapsExecutionInMain(t *testing.T) {
+	script, err := RenderBootstrap(BootstrapConfig{
+		RelayOrigin: "https://relay.example",
+		Version:     "dev",
+		Artifacts:   validBootstrapArtifactsForTest(),
+	})
+	if err != nil {
+		t.Fatalf("RenderBootstrap returned error: %v", err)
+	}
+
+	mainDefinition := "main() {\n"
+	mainCall := "\nmain \"$@\"\n"
+	definitionIndex := strings.Index(script, mainDefinition)
+	if definitionIndex == -1 {
+		t.Fatalf("RenderBootstrap() missing central main function in script:\n%s", script)
+	}
+	callIndex := strings.LastIndex(script, mainCall)
+	if callIndex == -1 {
+		t.Fatalf("RenderBootstrap() missing final main invocation in script:\n%s", script)
+	}
+	if callIndex < definitionIndex {
+		t.Fatalf("RenderBootstrap() invokes main before defining it in script:\n%s", script)
+	}
+
+	setupIndex := strings.Index(script, "relay_origin=")
+	if setupIndex == -1 {
+		t.Fatalf("RenderBootstrap() missing relay origin setup in script:\n%s", script)
+	}
+	if setupIndex < definitionIndex || setupIndex > callIndex {
+		t.Fatalf("RenderBootstrap() executes setup outside main in script:\n%s", script)
+	}
+}
+
 func TestRenderBootstrapRejectsMissingFields(t *testing.T) {
 	tests := []struct {
 		name string
