@@ -11,8 +11,6 @@ const (
 
 	// ClientSecretSize is the required byte length for client PSK material.
 	ClientSecretSize = 32
-	// CommandTimeoutSeconds is the default command execution timeout.
-	CommandTimeoutSeconds = 120
 	// MaxOutputBytes is the default maximum command output size.
 	MaxOutputBytes = 10 * 1024 * 1024
 	// IdleSessionTimeoutSeconds is the default idle session timeout.
@@ -32,7 +30,6 @@ var (
 
 // CommandDefaults describes default command-execution limits bound into the prologue.
 type CommandDefaults struct {
-	TimeoutSeconds            int
 	MaxOutputBytes            int
 	PTY                       bool
 	IdleSessionTimeoutSeconds int
@@ -62,7 +59,6 @@ type HandshakeConfig struct {
 // DefaultCommandDefaults returns command limits used when building a prologue.
 func DefaultCommandDefaults() CommandDefaults {
 	return CommandDefaults{
-		TimeoutSeconds:            CommandTimeoutSeconds,
 		MaxOutputBytes:            MaxOutputBytes,
 		PTY:                       false,
 		IdleSessionTimeoutSeconds: IdleSessionTimeoutSeconds,
