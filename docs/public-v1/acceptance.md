@@ -27,8 +27,8 @@ This document maps `docs/internal-planning/plan.md` public v1 requirements to th
 | One active command at a time | Implemented. |
 | Foreground `create` process owns lifetime | Implemented. |
 | Ctrl+C closes the tunnel | Implemented. |
-| Idle timeout closes forgotten sessions | Implemented. |
-| Command timeout and process cleanup | Implemented. |
+| Idle timeout closes forgotten sessions after 30 minutes between commands | Implemented. The idle timer does not run while a command is active. |
+| Command cancellation and process-group cleanup | Implemented. Commands have no duration deadline. Client disconnect or host shutdown cancels the command and stops its process group. |
 | Output limit and truncation | Implemented. |
 
 ## Documentation And Non-Goals

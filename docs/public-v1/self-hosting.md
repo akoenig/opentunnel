@@ -38,7 +38,7 @@ Users start a foreground host session with:
 curl -fsSL https://relay.example.com/cli | sh -s -- create
 ```
 
-The session stays open until Ctrl+C, idle timeout, relay failure, or process exit.
+A command has no duration deadline. It runs until it finishes, the client disconnects, or the host operator presses Ctrl+C. The 30-minute idle timeout applies only between commands, so it can close a forgotten session without interrupting active work. The foreground host process owns the session lifetime: Ctrl+C ends the session and cancels any running command.
 
 ## Public Client Command
 

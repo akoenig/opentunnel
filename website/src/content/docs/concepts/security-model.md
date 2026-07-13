@@ -31,8 +31,10 @@ Same-origin checksums are **not** a strong supply-chain security boundary. If th
 
 ## Execution semantics
 
-Commands execute without per-command approval while the foreground host session is running. OpenTunnel v1 intentionally keeps the model simple: one active client and one active command at a time. Granting a tunnel means granting command execution for the lifetime of the session. Scope what the agent can reach accordingly, and end the session when the task is done.
+Commands execute without per-command approval or a duration deadline while the foreground host session is running. OpenTunnel v1 intentionally keeps the model simple: one active client and one active command at a time. A command runs until it finishes, the client disconnects, or the host operator presses Ctrl+C. When cancellation reaches the host, OpenTunnel stops the command's process group so the shell and its descendants do not continue running.
+
+The 30-minute idle timeout applies only between commands and cannot interrupt active work. OpenTunnel does not currently send transport heartbeats, so a silent TCP failure that neither endpoint detects can leave a command running until the host operator presses Ctrl+C. The relay still sees only opaque encrypted frames and cannot inspect command state. Granting a tunnel means granting command execution for the lifetime of the session. Scope what the agent can reach accordingly, and end the session when the task is done.
 
 ## Host-side logs
 
-Host logs are local status messages. They help the host owner understand connection, command, timeout, truncation, and close events. They are not sent to the relay as plaintext.
+Host logs are local status messages. They help the host owner understand connection, command, idle expiration, output truncation, and session-close events. They are not sent to the relay as plaintext.

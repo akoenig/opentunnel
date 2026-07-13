@@ -17,7 +17,7 @@ curl -fsSL https://opentunnel.sh | sh
 |---|---|---|
 | `--relay` | bootstrap origin | Relay origin (`http(s)://host[:port]`, no path). When bootstrapped via `/cli`, this is supplied automatically through `OPENTUNNEL_RELAY_ORIGIN`. |
 
-The session stays open until Ctrl+C, idle timeout, relay failure, or process exit. Exiting revokes all access.
+Commands have no duration deadline. A running command ends when it finishes, its client disconnects, or you press Ctrl+C in the host terminal. The 30-minute idle timer runs only between commands, so it can close a forgotten session without interrupting active work. Exiting the host process revokes all access.
 
 ## `exec`
 
@@ -35,6 +35,8 @@ curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exe
 | `--invite` | supported | Pass the invite as a flag. Compatible but places the secret in process argv; prefer the alternatives above. |
 
 The invite contains everything needed to connect, including the relay origin. Everything after `--` is the command to execute on the host. Remote stdout and stderr stream to the local stdout and stderr, and `exec` exits with the remote command's exit code, which is what lets agents treat it like a local tool call.
+
+`exec` has no command-duration deadline. It waits until the command finishes, the client disconnects, or the host operator presses Ctrl+C. The host's 30-minute idle timer is paused while the command runs.
 
 Commands must be non-interactive: no PTY, no stdin. One client and one command run at a time.
 
