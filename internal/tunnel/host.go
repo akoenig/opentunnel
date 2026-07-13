@@ -22,7 +22,6 @@ import (
 )
 
 const (
-	defaultCommandTimeout = 120 * time.Second
 	defaultIdleTimeout    = 30 * time.Minute
 	defaultMaxOutputBytes = 10 * 1024 * 1024
 )
@@ -38,7 +37,6 @@ var errPreCommandClientFailure = errors.New("pre-command client failure")
 
 type HostConfig struct {
 	RelayURL       string
-	CommandTimeout time.Duration
 	IdleTimeout    time.Duration
 	MaxOutputBytes int
 	LogWriter      io.Writer
@@ -60,7 +58,6 @@ type hostRuntime struct {
 	clientSecret   [securechannel.ClientSecretSize]byte
 	relay          string
 	sessionID      string
-	commandTimeout time.Duration
 	idleTimeout    time.Duration
 	maxOutputBytes int
 	logger         *hostLogger
@@ -114,7 +111,6 @@ func StartHost(ctx context.Context, cfg HostConfig) (HostSession, error) {
 		clientSecret:   clientSecret,
 		relay:          relayURL.String(),
 		sessionID:      sessionID,
-		commandTimeout: cfg.CommandTimeout,
 		idleTimeout:    effectiveIdleTimeout(cfg.IdleTimeout),
 		maxOutputBytes: effectiveMaxOutputBytes(cfg.MaxOutputBytes),
 		logger:         &logger,
@@ -317,7 +313,7 @@ func readCommandRequest(conn *websocket.Conn, channel *securechannel.Channel) (m
 // the client disconnects.
 func (h *hostRuntime) runCommand(ctx context.Context, conn *websocket.Conn, channel *securechannel.Channel, commandLine string) error {
 	sender := outputSender{maxOutputBytes: h.maxOutputBytes, logger: h.logger}
-	commandCtx, cancel := context.WithTimeout(ctx, effectiveCommandTimeout(h.commandTimeout))
+	commandCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
 		for {
@@ -338,12 +334,7 @@ func (h *hostRuntime) runCommand(ctx context.Context, conn *websocket.Conn, chan
 		if senderErr := sender.err(); senderErr != nil {
 			return senderErr
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			h.logger.log("commandTimeout")
-			if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeCommandTimeout, "Command exceeded timeout."); sendErr != nil {
-				return sendErr
-			}
-		} else if errors.Is(err, context.Canceled) && ctx.Err() == nil {
+		if errors.Is(err, context.Canceled) && ctx.Err() == nil {
 			return nil
 		} else if ctx.Err() == nil {
 			if sendErr := sendError(channel, conn.WriteMessage, ErrorTypeCommandStartFailed, "Command failed to start."); sendErr != nil {
@@ -365,13 +356,6 @@ func (h *hostRuntime) runCommand(ctx context.Context, conn *websocket.Conn, chan
 		return fmt.Errorf("write exit: %w", err)
 	}
 	return nil
-}
-
-func effectiveCommandTimeout(commandTimeout time.Duration) time.Duration {
-	if commandTimeout == 0 {
-		return defaultCommandTimeout
-	}
-	return commandTimeout
 }
 
 func effectiveIdleTimeout(idleTimeout time.Duration) time.Duration {

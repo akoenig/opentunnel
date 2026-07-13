@@ -30,8 +30,10 @@ Same-origin checksums are not a strong supply-chain security boundary. If the re
 
 ## Execution Semantics
 
-Commands execute without per-command approval while the foreground host session is running. OpenTunnel v1 intentionally keeps the model simple: one active client and one active command at a time.
+Commands execute without per-command approval or a duration deadline while the foreground host session is running. OpenTunnel v1 intentionally keeps the model simple: one active client and one active command at a time. A command runs until it finishes, the client disconnects, or the host operator presses Ctrl+C. When cancellation reaches the host, OpenTunnel stops the command's process group so the shell and its descendants do not continue running.
+
+The 30-minute idle timeout applies only between commands. It does not interrupt a running command. OpenTunnel does not currently send transport heartbeats, so a silent TCP failure that neither endpoint detects can leave a command running until the host operator presses Ctrl+C. The relay continues to route opaque encrypted frames and cannot inspect command state.
 
 ## Host-Side Logs
 
-Host logs are local status messages. They should help the host owner understand connection, command, timeout, truncation, and close events. They are not sent to the relay as plaintext.
+Host logs are local status messages. They should help the host owner understand connection, command, idle expiration, output truncation, and session-close events. They are not sent to the relay as plaintext.

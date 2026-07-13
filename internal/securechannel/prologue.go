@@ -37,7 +37,6 @@ func BuildPrologue(cfg PrologueConfig) ([]byte, error) {
 	writeField(&buf, []byte(cfg.SessionID))
 	writeField(&buf, []byte(cfg.RelayOrigin))
 	writeField(&buf, []byte(cfg.PermissionMode))
-	writeUint32(&buf, uint32(cfg.CommandDefaults.TimeoutSeconds))
 	writeUint32(&buf, uint32(cfg.CommandDefaults.MaxOutputBytes))
 	if cfg.CommandDefaults.PTY {
 		writeField(&buf, []byte{1})

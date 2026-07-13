@@ -7,7 +7,6 @@ const (
 	ErrorTypeClientAlreadyConnected ErrorType = "ClientAlreadyConnectedError"
 	ErrorTypeHandshakeFailed        ErrorType = "HandshakeFailedError"
 	ErrorTypeCommandAlreadyRunning  ErrorType = "CommandAlreadyRunningError"
-	ErrorTypeCommandTimeout         ErrorType = "CommandTimeoutError"
 	ErrorTypeMaxOutputExceeded      ErrorType = "MaxOutputExceededError"
 	ErrorTypeCommandStartFailed     ErrorType = "CommandStartFailedError"
 	ErrorTypeIdleSessionTimeout     ErrorType = "IdleSessionTimeoutError"

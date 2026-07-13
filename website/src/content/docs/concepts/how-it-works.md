@@ -7,7 +7,7 @@ An OpenTunnel session involves three actors and deliberately little else.
 
 ## The actors
 
-**The host** is the foreground process on the remote machine, started with `create`. It generates the session invite, executes incoming commands, and defines the session's lifetime: when the host process exits (Ctrl+C, idle timeout, relay failure, or anything else) the session is over.
+**The host** is the foreground process on the remote machine, started with `create`. It generates the session invite, executes incoming commands, and defines the session's lifetime. Commands have no duration deadline and run until they finish, the client disconnects, or the host operator presses Ctrl+C. A separate 30-minute idle timer runs only between commands and closes forgotten sessions.
 
 **The client** is the temporary CLI your agent invokes with `exec`. It connects through the relay using the invite, sends one encrypted command, streams back encrypted stdout and stderr, and exits with the command's real exit code.
 
@@ -18,7 +18,7 @@ An OpenTunnel session involves three actors and deliberately little else.
 1. `create` downloads the temporary CLI from the relay's `/cli` endpoint, verifies its checksum against the same origin, and starts the host process.
 2. The host connects out to the relay, generates invite material, and prints the agent prompt. The invite contains everything the client needs, including the relay origin, which is why the agent-facing command has no relay flag.
 3. Your agent runs `exec` with the invite. The client bootstraps the same way (download, checksum, run), connects to the relay, and establishes an end-to-end encrypted channel with the host using the invite material.
-4. The command travels encrypted through the relay. The host executes it and streams stdout, stderr, and the exit code back, also encrypted.
+4. The command travels encrypted through the relay. The host pauses the idle timer, executes the command without a duration deadline, and streams stdout, stderr, and the exit code back, also encrypted. After the command finishes, the host starts a new 30-minute idle period while it waits for another command.
 5. Ctrl+C on the host tears everything down. The relay's in-memory connection state evaporates; the cached temporary CLI is left only in the system temp directory.
 
 ## What each party sees
