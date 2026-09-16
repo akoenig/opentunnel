@@ -1,11 +1,15 @@
 ---
 title: Getting Started
-description: Open your first OpenTunnel session and give your agent a remote shell.
+description: Open your first OpenTunnel session and give your agent commands on a remote machine.
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
 
 OpenTunnel gives your AI agent the ability to run commands on a remote machine as if they were local tool calls. This page takes you from nothing to a working tunnel in about a minute. No installation, no account, no configuration.
+
+<Aside type="note" title="Beta">
+v2 is published at `https://beta.opentunnel.sh`. The apex domain keeps serving the first version until v2 is generally available.
+</Aside>
 
 ## Your first tunnel
 
@@ -16,58 +20,67 @@ OpenTunnel gives your AI agent the ability to run commands on a remote machine a
    On the remote machine run:
 
    ```bash
-   curl -fsSL https://opentunnel.sh | sh
+   curl -fsSL https://beta.opentunnel.sh | sh
    ```
 
-   This downloads a temporary CLI from the relay, verifies its checksum, and opens one foreground session. The process prints a ready-made prompt for your agent and keeps running. As long as it runs, the tunnel is open; the moment it stops, access is gone.
+   This downloads a small binary, verifies it against the checksum pinned in the script, and opens one foreground session. The process prints a ready-made prompt for your agent and keeps running. As long as it runs, the tunnel is open; the moment it stops, access is gone.
 
-   The domain answers command-line clients directly with a short, self-documenting script. Prefer a more explicit URL? `curl -fsSL https://opentunnel.sh/create | sh` serves the identical script. Curl either URL without the pipe first to read what runs.
+   The script is plain text. Curl it without the pipe first if you want to read what runs.
 
 2. **Paste the printed prompt into your agent.**
 
    The session prints something like:
 
    ```text
-   I opened an OpenTunnel session for you.
+   I opened an OpenTunnel session for you: temporary command access to a
+   remote machine through an encrypted tunnel.
 
-   Run commands on my host with:
+   Setup (run once, on this machine):
 
-   curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
-     -- '<COMMAND>'
+       curl -fsSL https://beta.opentunnel.sh/agent | sh -s -- tc...
+
+   The installer prints the path of a `remote` helper, e.g.
+   /tmp/opentunnel-agent.XXXXXX/remote. Use it for every remote command:
+
+       <path>/remote 'uname -a && pwd'
    ```
 
-   Hand that to your agent: [OpenCode](https://opencode.ai), or anything that can run shell commands. The agent now has a remote shell as a tool: it substitutes its command, runs the line, and receives stdout, stderr, and the real exit code, exactly as if the command had run locally.
+   Hand that to your agent: [OpenCode](https://opencode.ai), or anything that can run shell commands. The agent runs the installer once, then uses the `remote` helper for everything. It receives stdout, stderr, and the real exit code, exactly as if the command had run locally.
 
 3. **Let the agent work.**
 
-   From here you talk to your agent as usual. It handles the tunnel on its own and runs whatever the task needs on the remote machine. For example:
+   From here you talk to your agent as usual. For example:
 
    > Install a Minecraft Crossplay server.
 
-   Commands execute one at a time, without per-command approval, for as long as your foreground session is running.
+   Commands run without per-command approval for as long as your foreground session is running, and several may run at the same time.
 
 4. **Press Ctrl+C when you're done.**
 
-   The session ends, the invite expires, and the relay forgets the connection ever existed. There is nothing to clean up and nothing left behind.
+   The session ends, both temp directories are removed, and the tunnel address stops working forever. There is nothing to clean up and nothing left behind.
 
 </Steps>
 
-<Aside type="caution" title="Invites are bearer secrets">
-Anyone holding a valid invite can attempt to connect while your session is active. Don't paste invites into shared logs, tickets, or long-lived notes. Treat them like a password that happens to expire when you hit Ctrl+C.
+<Aside type="caution" title="The address is a bearer secret until your agent claims it">
+Anyone holding a fresh tunnel address can claim it during the first five minutes. Once your agent has claimed it, the tunnel is pinned to that one machine's key and the address alone is useless. Don't paste addresses into shared logs, tickets, or long-lived notes.
 </Aside>
+
+## Moving files
+
+The agent installer writes two things next to each other: the `remote` helper and an `ssh` wrapper for the standard tools.
+
+```bash
+remote --put ./patch.diff /tmp/patch.diff
+remote --get /var/log/build.log ./build.log
+
+rsync -av -e /tmp/opentunnel-agent.XXXXXX/ssh ./dist opentunnel:/srv/app
+scp -O -S /tmp/opentunnel-agent.XXXXXX/ssh ./file opentunnel:/srv/app/
+```
 
 ## Good to know
 
-- Commands must be **non-interactive**: there is no PTY and no stdin in v1. Avoid `sudo` unless it is passwordless.
-- **One agent, one command at a time.** Only a single agent can connect to a tunnel; multiple agents per tunnel are not supported, by design. This is part of the [security model](/concepts/security-model/), not a limitation to engineer around.
-- The temporary CLI is cached in the system temp directory for the duration of the session and verified by checksum on every cache hit.
-
-## Prefer your own relay?
-
-Everything above works identically against a relay you run yourself: one stateless container, no database, no accounts. Your agents then fetch from your origin instead of `opentunnel.sh`:
-
-```bash
-curl -fsSL https://relay.example.com/cli | sh -s -- create
-```
-
-See the [self-hosting guide](/guides/self-hosting/); it genuinely is one command.
+- Commands must be **non-interactive**: there is no PTY and no stdin from a terminal. Avoid `sudo` unless it is passwordless.
+- **One agent per tunnel.** The first client to claim the tunnel is pinned to it; a second machine cannot join. This is part of the [security model](/concepts/security-model/), not a limitation to engineer around.
+- Commands run in a **login shell** in the session working directory, so your `.profile` environment is available. Anything that profile prints goes into the command output too.
+- The session ends by itself after 30 minutes without a command. Set `OPENTUNNEL_TTL` if you also want a hard limit on the total, and `OPENTUNNEL_CWD` to choose the working directory. The full list is in the [CLI reference](/reference/cli/).
+- The agent machine needs an `ssh` client. Both machines need Linux or macOS on amd64 or arm64.

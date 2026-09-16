@@ -1,0 +1,25 @@
+// Cloudflare Workers configuration for beta.opentunnel.sh.
+// Static assets only: the two shell scripts and the pinned tailcat binaries.
+// build/embed.sh and build/build-tailcat.sh write ./dist (copied from the
+// repository root dist/ at deploy time).
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "opentunnel-beta",
+	"compatibility_date": "2026-06-01",
+	"main": "worker/index.js",
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"not_found_handling": "none",
+		"run_worker_first": true
+	},
+	"routes": [
+		{
+			"pattern": "beta.opentunnel.sh",
+			"custom_domain": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}

@@ -418,3 +418,27 @@ The three-step UX and the core positioning stay: tool calls as if local, ephemer
 | Builds | linux/darwin × amd64/arm64 only; no armv7, no Windows. |
 | Per-command timeout | None. |
 | Website | Copy rewritten for v2 (section 14.2), published at GA. |
+
+---
+
+## 17. Implementation notes (2026-09-16, after building it)
+
+The design holds. Four things were wrong in the draft and are corrected in the code; both open questions from section 2 are answered.
+
+| Topic | What the plan said | What the implementation does, and why |
+|---|---|---|
+| POSIX shim | The served script saves the rest of stdin to `$WORK/self.sh` and re-execs bash. | Does not work: dash reads the whole script from the pipe into its buffer, so `cat` gets nothing and the script exits silently. `build/embed.sh` wraps the bash body in a quoted heredoc instead: the shim writes the body out and always re-execs bash. Verified under `sh`, `dash`, and `bash`, piped and as a file. The shim also creates the temp directory and passes it as `OPENTUNNEL_WORK_DIR`, so there is still exactly one directory per process. |
+| Client command form | `tailcat ssh <addr> -- <cmd>`. | tailcat passes `--` through as part of the command, so the remote `bash -lc` receives `-- true` and exits 2. The correct form is `tailcat ssh <addr> <cmd>`, with no separator. |
+| One tailcat client per command | `remote` runs `tailcat ssh` per invocation. | A tailcat client holds one connection per node key: three concurrent client processes sharing the agent's key produced one success, one dial timeout, and one process that hung indefinitely. The agent now opens one shared SSH connection (`ControlMaster`, `ControlPersist`, `ControlPath` in the temp directory) over a single tailcat client used as `ProxyCommand`, and every `remote` call, `scp`, and `rsync` rides on it. Four concurrent commands verified: all exit 0, the host counts four sessions. |
+| ProxyCommand port | `tailcat --key=… <addr>` (default port). | The forced-command SSH service listens on port 22, so the ProxyCommand is `tailcat --key=… <addr> 22`. Without the port, scp and rsync fail with a dial timeout. |
+
+Answers to the open questions:
+
+- **The claim client exits on its own** once the host has read the key and closed the one-shot connection (verified: phase 1 exits after about 2 s, the client right after). The agent still waits for it and kills it if it lingers, because a second client process with the same key would fight over the tunnel connection.
+- **SFTP does not reach ForceCommand.** `sftp` fails with "subsystem request failed", so `scp` needs `-O` and `rsync` works unchanged. Both are documented and covered by the end-to-end test.
+
+Smaller decisions taken while implementing:
+
+- The generated `ssh` wrapper sets `BatchMode`, `ConnectTimeout`, and `ServerAlive*` so a command against an ended session fails instead of hanging.
+- `deploy-website.yml` on `main` is `workflow_dispatch` only during the beta, because the v2 copy prepared on `main` must not go live on the apex domain before GA. The `1.x` branch deploys the apex site in the meantime.
+- `scripts/release.sh` exists on `main` with the v2 verification set (shellcheck, bats, embed, `bash -n`); `1.x` keeps its own, re-pointed at the `1.x` branch.

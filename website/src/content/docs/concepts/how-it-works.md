@@ -1,36 +1,48 @@
 ---
 title: How It Works
-description: The three actors in an OpenTunnel session (host, client, and relay) and what travels between them.
+description: The two actors in an OpenTunnel session, the claim that pins the tunnel to one agent, and what travels between them.
 ---
 
-An OpenTunnel session involves three actors and deliberately little else.
+An OpenTunnel session involves two machines and deliberately little else.
 
 ## The actors
 
-**The host** is the foreground process on the remote machine, started with `create`. It generates the session invite, executes incoming commands, and defines the session's lifetime. Commands have no duration deadline and run until they finish, the client disconnects, or the host operator presses Ctrl+C. A separate 30-minute idle timer runs only between commands and closes forgotten sessions.
+**The host** is the foreground process on the remote machine, started with `curl -fsSL https://beta.opentunnel.sh | sh`. It generates an ephemeral tunnel key, prints the prompt for your agent, runs the commands that arrive, and defines the session's lifetime.
 
-**The client** is the temporary CLI your agent invokes with `exec`. It connects through the relay using the invite, sends one encrypted command, streams back encrypted stdout and stderr, and exits with the command's real exit code.
+**The agent side** is the machine your coding agent runs on. A one-line installer downloads the same binary, generates a client identity, claims the tunnel, and writes a `remote` helper. Every command the agent runs goes through that helper.
 
-**The relay** is a stateless rendezvous point. Host and client both dial out to it over WebSockets, which is what makes the whole thing work without inbound firewall rules on either side. The relay matches the two connections and forwards opaque encrypted frames between them.
+**The transport** is [tailcat](https://github.com/tailscale/tailcat): WireGuard between the two machines, with Tailscale's NAT traversal and its public relays as a fallback path. There is no control plane, no account, and no inbound port on either side. A relay only ever forwards ciphertext.
 
 ## A session, start to finish
 
-1. `create` downloads the temporary CLI from the relay's `/cli` endpoint, verifies its checksum against the same origin, and starts the host process.
-2. The host connects out to the relay, generates invite material, and prints the agent prompt. The invite contains everything the client needs, including the relay origin, which is why the agent-facing command has no relay flag.
-3. Your agent runs `exec` with the invite. The client bootstraps the same way (download, checksum, run), connects to the relay, and establishes an end-to-end encrypted channel with the host using the invite material.
-4. The command travels encrypted through the relay. The host pauses the idle timer, executes the command without a duration deadline, and streams stdout, stderr, and the exit code back, also encrypted. After the command finishes, the host starts a new 30-minute idle period while it waits for another command.
-5. Ctrl+C on the host tears everything down. The relay's in-memory connection state evaporates; the cached temporary CLI is left only in the system temp directory.
+1. The host script downloads the tailcat binary, verifies it against the sha256 pinned inside the script, and generates a session key. The key never leaves the temp directory. Its tunnel address goes into the prompt.
+2. **Claim.** The host listens for exactly one connection. The agent installer connects and sends one thing: the public key of the client identity it just generated. The host validates it and stops listening.
+3. **Pin.** The host restarts the tunnel on the same address, now restricted to that one key. Every other key is ignored at the WireGuard layer, so the address by itself no longer gets anyone in.
+4. The agent opens one shared SSH connection over the tunnel. Each command the agent runs becomes a session on that connection, so commands can run concurrently without opening a second tunnel.
+5. On the remote machine every session runs the same wrapper: it refuses sessions without a command, records the command line in the session audit log, marks the session as active, and runs the command with your login environment in the session working directory.
+6. Ctrl+C on the host ends everything. Both temp directories are removed, the ephemeral key is gone, and the address is permanently useless.
+
+## Lifetime
+
+Nothing keeps a forgotten session open.
+
+| Limit | Default | What it does |
+|---|---|---|
+| Claim window | 5 minutes | If no agent claims the tunnel, the session ends. |
+| Idle timeout | 30 minutes | With no command running and none started, the session ends. |
+| Hard limit | off | `OPENTUNNEL_TTL` caps the total session length, even during an active command. |
+| Ctrl+C | always | Ends the session immediately. |
+
+A malformed or foreign claim ends the session too. The host does not go back to waiting: you run the command again and get a fresh address.
 
 ## What each party sees
 
-| | Commands & output | Invite secrets | Routing metadata |
+| | Commands and output | Tunnel address | Private keys |
 |---|---|---|---|
-| Host | plaintext (it executes them) | generates them | yes |
-| Client | plaintext (it sends/receives them) | holds them | yes |
-| Relay | **ciphertext only** | never | yes: roles, timing, frame sizes |
+| Host | plaintext (it runs them) | generates it | its own, in its temp directory |
+| Agent machine | plaintext (it sends and receives them) | holds it | its own, in its temp directory |
+| Relay | **ciphertext only** | never | never |
 
-This is the property the whole design leans on: the relay can route your traffic without being able to read it, so the question "who operates the relay?" stops being a trust decision. The details live in the [security model](/concepts/security-model/).
+## The temporary binary
 
-## The temporary CLI
-
-There is nothing to install. The `/cli` endpoint serves a small bootstrapper with the relay origin baked in; it picks the right binary for your platform (Linux/macOS, amd64/arm64), downloads it from the same origin, verifies the checksum, and runs it. During an active session the binary is cached in a private temp path, and cache hits are checksum-verified again. When the session is over, no system-level installation has taken place.
+Nothing is installed. Both scripts download the same tailcat binary for your platform (Linux or macOS, amd64 or arm64) into a private temp directory, verify it against a checksum pinned in the script itself, and remove it when the session ends. The binaries are built from a commit of tailcat pinned in this repository, so the checksum in the script and the binary served always belong together.

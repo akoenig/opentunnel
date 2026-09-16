@@ -1,60 +1,82 @@
 ---
 title: CLI Reference
-description: The opentunnel subcommands (create, exec, and relay) and their flags.
+description: The host script, the agent installer, the remote helper, and the OPENTUNNEL_ environment variables.
 ---
 
-The `opentunnel` binary has three subcommands. In normal use you never install it: the `/cli` bootstrapper downloads a temporary, checksum-verified copy and passes your arguments through, so `curl -fsSL https://opentunnel.sh | sh` and `opentunnel create` are equivalent.
+OpenTunnel is two scripts and one generated helper. Nothing is installed: both scripts download a temporary, checksum-verified binary into a private temp directory and remove it when the session ends.
 
-## `create`
+## Host script
 
-Starts a foreground host session on the current machine and prints the agent prompt.
-
-```bash
-curl -fsSL https://opentunnel.sh | sh
-```
-
-| Flag | Default | Purpose |
-|---|---|---|
-| `--relay` | bootstrap origin | Relay origin (`http(s)://host[:port]`, no path). When bootstrapped via `/cli`, this is supplied automatically through `OPENTUNNEL_RELAY_ORIGIN`. |
-
-Commands have no duration deadline. A running command ends when it finishes, its client disconnects, or you press Ctrl+C in the host terminal. The 30-minute idle timer runs only between commands, so it can close a forgotten session without interrupting active work. Exiting the host process revokes all access.
-
-## `exec`
-
-Connects to an active session and runs one command. This is the command your agent uses.
+Run this on the machine your agent should reach. It stays in the foreground and prints the prompt to paste into your agent.
 
 ```bash
-curl -fsSL https://opentunnel.sh/cli | OPENTUNNEL_INVITE='<invite>' sh -s -- exec \
-  -- 'hostname && uname -a'
+curl -fsSL https://beta.opentunnel.sh | sh
 ```
 
-| Flag | Default | Purpose |
+It also works with `| bash`, and the script is plain text: curl it without the pipe to read what runs.
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `OPENTUNNEL_INVITE` | preferred | Environment variable carrying the invite printed by `create`. Keeps the bearer secret out of process command lines. |
-| `--invite-stdin` | off | Read the invite from stdin for stronger local secrecy. |
-| `--invite` | supported | Pass the invite as a flag. Compatible but places the secret in process argv; prefer the alternatives above. |
+| `OPENTUNNEL_CLAIM_TIMEOUT` | `300` | Seconds to wait for an agent to claim the tunnel. |
+| `OPENTUNNEL_IDLE` | `1800` | Seconds with no command running and none started before the session ends. |
+| `OPENTUNNEL_TTL` | `0` | Hard limit in seconds on the whole session. `0` disables it. |
+| `OPENTUNNEL_CWD` | current directory | Working directory for remote commands. |
+| `OPENTUNNEL_KEEP_AUDIT` | unset | `1` copies the session audit log next to where you started the host. |
+| `OPENTUNNEL_BASE_URL` | `https://beta.opentunnel.sh` | Origin the scripts download from. |
 
-The invite contains everything needed to connect, including the relay origin. Everything after `--` is the command to execute on the host. Remote stdout and stderr stream to the local stdout and stderr, and `exec` exits with the remote command's exit code, which is what lets agents treat it like a local tool call.
+Status lines go to stderr with an `[opentunnel]` prefix. Only the prompt goes to stdout, so `curl ... | sh > prompt.txt` captures exactly the prompt.
 
-`exec` has no command-duration deadline. It waits until the command finishes, the client disconnects, or the host operator presses Ctrl+C. The host's 30-minute idle timer is paused while the command runs.
+The session ends on Ctrl+C, on the idle timeout, on the hard limit, if nobody claims the tunnel in time, or if the claim is malformed.
 
-Commands must be non-interactive: no PTY, no stdin. One client and one command run at a time.
+## Agent installer
 
-## `relay`
-
-Runs a relay server. Only operators need this; see [self-hosting](/guides/self-hosting/).
+Your agent runs this once, with the address from the prompt.
 
 ```bash
-opentunnel relay --public-url https://relay.example.com
+curl -fsSL https://beta.opentunnel.sh/agent | sh -s -- tc...
 ```
 
-| Flag | Default | Purpose |
+| Variable | Default | Purpose |
 |---|---|---|
-| `--public-url` | *(required)* | Public origin embedded into the `/cli` bootstrapper. Must be a bare `http(s)` origin without path, query, or userinfo. |
-| `--listen` | `:8080` | HTTP listen address. |
-| `--artifact-dir` | `/opentunnel-artifacts` | Directory containing CLI artifacts named like `opentunnel-1.0.0-linux-amd64`. |
-| `--version` | build version | Version string used to resolve artifact filenames. |
+| `OPENTUNNEL_CONNECT_TIMEOUT` | `90` | Seconds to wait for the tunnel to come up after claiming it. |
+| `OPENTUNNEL_CONTROL_PERSIST` | `600` | Seconds the shared connection stays open while idle. |
+| `OPENTUNNEL_BASE_URL` | `https://beta.opentunnel.sh` | Origin the scripts download from. |
+
+It prints exactly one line to stdout, which is what the agent parses:
+
+```text
+remote helper: /tmp/opentunnel-agent.XXXXXX/remote
+```
+
+It requires `ssh` on the agent machine, and it fails if the tunnel was already claimed by somebody else.
+
+## `remote`
+
+The generated helper is the whole client surface.
+
+```bash
+remote '<command>'                 # run a command, exit code passes through
+remote --put <local> <remote>      # copy a file to the remote machine
+remote --get <remote> <local>      # copy a file from the remote machine
+remote --close                     # end this client and remove its keys
+```
+
+Commands run non-interactively with your login environment in the session working directory. Several `remote` calls may run at the same time: they share one connection.
+
+Next to the helper there is an `ssh` wrapper for the standard file tools. The host name is ignored; the tunnel address is baked in.
+
+```bash
+rsync -av -e /tmp/opentunnel-agent.XXXXXX/ssh ./dist opentunnel:/srv/app
+scp -O -S /tmp/opentunnel-agent.XXXXXX/ssh ./file opentunnel:/srv/app/
+```
+
+`scp` needs `-O`: OpenSSH 9 and later default to the SFTP subsystem, which the forced command does not serve.
 
 ## Exit codes
 
-`exec` propagates the remote command's exit code. All subcommands exit `2` on argument errors and `1` on runtime failures.
+| Code | Meaning |
+|---|---|
+| remote command's code | The command ran. `remote` exits with exactly what it returned. |
+| `2` | Usage error, or a session without a command (interactive shells are refused). |
+| `255` | The tunnel is gone: the session ended, or it was never reachable. Report it and stop, do not retry in a loop. |
+| `1` | The host or the installer failed. The message says why. |

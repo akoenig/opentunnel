@@ -10,86 +10,59 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     steps:
-      - name: Configure Git defaults
-        run: git config --global init.defaultBranch main
-
       - name: Checkout
         uses: actions/checkout@v6.0.3
 
-      - name: Set up Go
-        uses: actions/setup-go@v6.4.0
-        with:
-          go-version: '1.26.5'
-          cache: false
-
-      - name: Test
-        run: go test ./... -count=1
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
-
-      - name: Vulnerability check
-        run: govulncheck ./...
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.12.2
-
-      - name: Module tidy check
-        run: go mod tidy -diff
-
-      - name: Race tests
-        run: go test -race ./... -count=1
-
-      - name: Build CLI
-        run: go build ./cmd/opentunnel
-
-  build-artifacts:
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            platform: linux-amd64
-          - goos: linux
-            goarch: arm64
-            platform: linux-arm64
-          - goos: darwin
-            goarch: amd64
-            platform: darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            platform: darwin-arm64
-    steps:
-      - name: Configure Git defaults
-        run: git config --global init.defaultBranch main
-
-      - name: Checkout
-        uses: actions/checkout@v6.0.3
-
-      - name: Set up Go
-        uses: actions/setup-go@v6.4.0
-        with:
-          go-version: '1.26.5'
-          cache: false
-
-      - name: Build artifact
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: '0'
+      - name: Install shellcheck and bats
         run: |
-          mkdir -p dist
-          version="$(cat VERSION)"
-          go build -ldflags "-X opentunnel/internal/buildinfo.Version=${version}" -o "dist/opentunnel-${version}-${{ matrix.platform }}" ./cmd/opentunnel
+          sudo apt-get update
+          sudo apt-get install -y shellcheck bats
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7.0.1
+      - name: Shellcheck
+        run: shellcheck -s bash scripts/*.sh build/*.sh test/e2e.sh
+
+      - name: Unit tests
+        run: bats test/unit
+
+      - name: Embed without checksums
+        env:
+          OPENTUNNEL_SKIP_CHECKSUMS: '1'
+        run: |
+          build/embed.sh
+          bash -n dist/host.sh
+          bash -n dist/agent.sh
+
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.3
+
+      - name: Read the pinned tailcat commit
+        id: tailcat
+        run: echo "commit=$(tr -d '[:space:]' < build/TAILCAT_COMMIT)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out tailcat
+        uses: actions/checkout@v6.0.3
         with:
-          name: opentunnel-${{ matrix.platform }}
-          path: dist/opentunnel-*-${{ matrix.platform }}
+          repository: tailscale/tailcat
+          ref: ${{ steps.tailcat.outputs.commit }}
+          path: .tailcat-src
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version-file: .tailcat-src/go.mod
+          cache: false
+
+      - name: Build tailcat
+        env:
+          TAILCAT_SRC: .tailcat-src
+          TARGETS: linux/amd64
+        run: build/build-tailcat.sh
+
+      - name: Embed the served scripts
+        run: build/embed.sh
+
+      - name: End to end
+        run: test/e2e.sh

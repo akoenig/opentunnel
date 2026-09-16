@@ -1,13 +1,13 @@
 ---
 title: Scope & Non-Goals
-description: What OpenTunnel v1 deliberately does not do, and why that is the security model.
+description: What OpenTunnel deliberately does not do, and why that is the security model.
 ---
 
-OpenTunnel v1 deliberately keeps the access model temporary and narrow. The exclusions below are not a roadmap of missing features; they protect the core product principle: **one foreground host process, one client, one temporary CLI, and zero persistent relay state.**
+OpenTunnel keeps the access model temporary and narrow. The exclusions below are not a roadmap of missing features; they protect the core product principle: **one foreground host process, one pinned client, ephemeral keys, and no persistent state anywhere.**
 
 Every item on this list is something that would create standing access, standing state, or standing infrastructure: exactly what OpenTunnel exists to avoid.
 
-## Not included in v1
+## Not included
 
 **No standing identity or access:**
 
@@ -17,25 +17,31 @@ Every item on this list is something that would create standing access, standing
 
 **No standing state:**
 
-- Persistent relay state.
-- Persistent command logs, audit logs, payload logs, or client metadata.
-- Public relay dashboard or session list.
+- Persistent session state on either machine. Both temp directories are removed when the session ends.
+- Audit logs that outlive the session. The session audit log is local to the remote machine and removed with it, unless you copy it out with `OPENTUNNEL_KEEP_AUDIT=1`.
 
 **No expanded execution surface:**
 
-- Raw SSH compatibility.
-- PTY support.
-- Interactive stdin.
-- File upload or download.
-- Multiple simultaneous clients for one tunnel.
-- Concurrent command execution in one tunnel.
+- PTY support and interactive stdin, so no editors, pagers, or interactive prompts.
+- Sandboxing or a command allowlist. Commands run as your user.
+- Multiple simultaneous clients for one tunnel. The tunnel is pinned to exactly one.
 - Background command management.
+- Windows hosts.
 
 **No additional integration surface:**
 
 - MCP integration.
 - Approval workflows.
 
+## Included
+
+Some things the first major version excluded are part of the current design:
+
+- **File transfer**, with `remote --put` and `remote --get`, and with `rsync` and `scp` through the generated `ssh` wrapper.
+- **Concurrent commands.** Several commands may run at once over one shared connection.
+- **SSH as the transport.** The tunnel carries an SSH connection, which is what makes standard tools work unchanged. It is not standing SSH access: no port is exposed, no authorized key is added, and the forced command constrains what a session can do.
+- **A session-scoped audit log** on the remote machine, recording every command line.
+
 ## What this means in practice
 
-If your task needs interactive shells, file sync, or always-on access, OpenTunnel is the wrong tool; SSH and its ecosystem do that well. OpenTunnel covers the case those tools handle badly: giving an agent temporary, revocable, end-to-end encrypted command execution on a machine, with nothing to set up beforehand and nothing left behind afterwards.
+If your task needs interactive shells, always-on access, or a sandbox, OpenTunnel is the wrong tool. It covers the case those tools handle badly: giving an agent temporary, revocable, end-to-end encrypted command execution on a machine, with nothing to set up beforehand and nothing left behind afterwards.

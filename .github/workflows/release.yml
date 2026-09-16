@@ -1,77 +1,97 @@
 name: Release
 
 on:
-  release:
-    types:
-      - published
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  publish-container:
+  publish:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
 
-      - name: Read version
-        id: version
-        shell: bash
+      - name: Check the tag matches VERSION
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          tag="${{ github.event.release.tag_name }}"
-          prerelease="${{ github.event.release.prerelease }}"
-          if [ "$prerelease" = "true" ]; then
-            printf 'prereleases do not publish stable release images or move latest\n' >&2
+          tag="${GITHUB_REF_NAME}"
+          [ "$version" = "$tag" ] || {
+            echo "VERSION ($version) does not match the tag ($tag)" >&2
             exit 1
-          fi
-          if [ "$version" = "dev" ]; then
-            printf 'VERSION must not be dev for a release\n' >&2
-            exit 1
-          fi
-          if [ "$tag" != "$version" ]; then
-            printf 'release tag %s does not match VERSION %s\n' "$tag" "$version" >&2
-            exit 1
-          fi
-          case "$version" in
-            v*)
-              printf 'release versions must not use a leading v: %s\n' "$version" >&2
-              exit 1
-              ;;
-          esac
-          if [[ ! "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
-            printf 'VERSION must be a valid Docker tag: %s\n' "$version" >&2
-            exit 1
-          fi
-          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          }
 
-      - name: Set image name
-        id: image
-        shell: bash
+      - name: Read the pinned tailcat commit
+        id: tailcat
+        run: echo "commit=$(tr -d '[:space:]' < build/TAILCAT_COMMIT)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out tailcat
+        uses: actions/checkout@v6.0.3
+        with:
+          repository: tailscale/tailcat
+          ref: ${{ steps.tailcat.outputs.commit }}
+          path: .tailcat-src
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version-file: .tailcat-src/go.mod
+          cache: false
+
+      - name: Build the tailcat binaries
+        env:
+          TAILCAT_SRC: .tailcat-src
+        run: build/build-tailcat.sh
+
+      - name: Embed the served scripts
+        run: build/embed.sh
+
+      - name: Keep the binaries of earlier releases reachable
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          printf 'name=%s\n' "$image" >> "$GITHUB_OUTPUT"
+          # Already printed prompts point at /bin/<older version>/, and a
+          # Workers assets deploy replaces the whole asset set, so the earlier
+          # releases are rebuilt into dist/ before deploying.
+          previous="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n 3)"
+          for tag in $previous; do
+            echo "rebuilding tailcat for $tag"
+            git -c advice.detachedHead=false checkout --quiet "$tag" -- VERSION build/TAILCAT_COMMIT || continue
+            build/build-tailcat.sh || true
+          done
+          git checkout --quiet "${GITHUB_REF_NAME}" -- VERSION build/TAILCAT_COMMIT
+          ls -1 dist/bin
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+      - name: Stage the assets
+        run: |
+          set -euo pipefail
+          rm -rf site/dist
+          mkdir -p site/dist
+          cp dist/host.sh dist/agent.sh site/dist/
+          cp -R dist/bin site/dist/bin
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v4.2.0
+      - name: Deploy the beta worker
+        uses: cloudflare/wrangler-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: site
+          command: deploy
 
-      - name: Build and push image
-        uses: docker/build-push-action@v7.2.0
-        with:
-          context: .
-          file: deploy/docker/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:${{ steps.version.outputs.version }}
-            ${{ steps.image.outputs.name }}:latest
+      - name: Smoke test the published scripts
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          curl -fsSL https://beta.opentunnel.sh | head -n 2
+          curl -fsSL https://beta.opentunnel.sh/agent | head -n 2
+          for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            curl -fsSL -o "/tmp/tailcat_$target" "https://beta.opentunnel.sh/bin/$version/tailcat_$target"
+          done
+          (cd /tmp && sha256sum -c <(sed 's#tailcat_#/tmp/tailcat_#' "$GITHUB_WORKSPACE/dist/bin/$version/SHA256SUMS"))

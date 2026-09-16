@@ -79,7 +79,7 @@ export default defineConfig({
 					navLinks: [
 						{ label: 'Docs', link: '/getting-started/' },
 						{ label: 'Security Model', link: '/concepts/security-model/' },
-						{ label: 'Self-Hosting', link: '/guides/self-hosting/' },
+						{ label: 'How It Works', link: '/concepts/how-it-works/' },
 					],
 					docs: { includeAiUtilities: true },
 					footerText: FOOTER_TEXT,
@@ -93,10 +93,6 @@ export default defineConfig({
 				{
 					label: 'Concepts',
 					items: ['concepts/how-it-works', 'concepts/security-model'],
-				},
-				{
-					label: 'Guides',
-					items: ['guides/self-hosting', 'guides/relay-operations'],
 				},
 				{
 					label: 'Reference',

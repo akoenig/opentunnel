@@ -1,11 +1,10 @@
 name: Deploy Website
 
+# During the v2 beta the apex domain keeps serving the 1.x copy, which is
+# deployed from the 1.x branch. The v2 copy is prepared on main and goes live
+# by running this workflow by hand when v2 is generally available. Restore the
+# push trigger on main at that point.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'website/**'
   workflow_dispatch:
 
 concurrency:
