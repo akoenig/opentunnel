@@ -74,12 +74,12 @@ commit_log_since() {
   git log "${latest_tag}..HEAD" --format='%s%n%b'
 }
 
-ensure_clean_main() {
+ensure_clean_release_branch() {
   local branch
   branch="$(git branch --show-current)"
-  [ "$branch" = "main" ] || die "must run from main branch"
-  git fetch origin main --tags
-  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || die "local main must match origin/main"
+  [ "$branch" = "1.x" ] || die "must run from the 1.x branch"
+  git fetch origin 1.x --tags
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/1.x)" ] || die "local 1.x must match origin/1.x"
   [ -z "$(git status --porcelain)" ] || die "working tree must be clean, including untracked files"
 }
 
@@ -106,7 +106,7 @@ run_verification() {
 main() {
   local requested_bump bump latest_tag log_text next_version release_commit
   requested_bump="$(validate_bump "${1:-}")"
-  ensure_clean_main
+  ensure_clean_release_branch
   ensure_release_tools
   ensure_dev_version
 
@@ -137,7 +137,7 @@ main() {
   printf 'dev\n' > VERSION
   git add VERSION
   git commit -m "chore: reopen development"
-  git push origin main
+  git push origin 1.x
   printf 'released %s\n' "$next_version"
 }
 
