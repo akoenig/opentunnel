@@ -32,13 +32,17 @@ An agent that keeps issuing commands keeps an idle-limited session alive indefin
 Every SSH session on the remote machine runs one wrapper script in place of a shell (OpenSSH calls this a forced command). The wrapper:
 
 - refuses sessions without a command, so there is no interactive shell and no PTY;
-- appends one line per command to the session audit log: timestamp, peer key, peer address, and the command line, never the data piped through it;
+- appends one line per command to the session audit log: timestamp, session id, peer key, peer address, and the command line, never the data piped through it, followed by a second line with the exit code;
 - marks the session as running so the idle timer cannot end the session under an active command;
 - runs the command with `bash -lc` in the session working directory, so your agent gets the same environment you would get on login.
 
 There is no command allowlist. Granting a tunnel means granting command execution as your user for the lifetime of the session, including reading and writing files. Scope what the agent can reach accordingly, and end the session when the task is done.
 
 Because commands run in a login shell, anything your shell profile prints on startup is mixed into command output. That also affects `remote --get`, which streams a file through the same channel.
+
+## Watching the session
+
+The terminal that opened the tunnel prints every command as it starts and its exit code when it ends, prefixed with the session id so concurrent commands stay readable. There is no way for the agent to run something that does not appear there: the wrapper writes the record before it runs the command. Set `OPENTUNNEL_SHOW_COMMANDS=0` if you would rather have a quiet terminal, and the records still go to the audit log.
 
 ## The audit log
 

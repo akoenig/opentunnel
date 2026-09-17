@@ -106,6 +106,17 @@ wait_for_addr() {
 	return 1
 }
 
+# wait_for_log <basic regex> [seconds]
+wait_for_log() {
+	local pattern=$1 limit=${2:-15} waited=0
+	while [ "$waited" -lt "$limit" ]; do
+		grep -q "$pattern" "$HOST_ERR" 2>/dev/null && return 0
+		sleep 1
+		waited=$((waited + 1))
+	done
+	return 1
+}
+
 install_agent() {
 	local rc
 	sh "$repo_root/dist/agent.sh" "$ADDR" >"$TMP/agent.out" 2>"$TMP/agent.err"
@@ -143,6 +154,9 @@ $REMOTE_CWD" "$out"
 
 "$HELPER" 'exit 7' >/dev/null 2>&1
 check "remote exit code passthrough" "7" "$?"
+
+wait_for_log '\$ echo hi; pwd' && ok "host terminal shows the command" || fail "host terminal shows the command"
+wait_for_log 'exit=7' && ok "host terminal shows the exit code" || fail "host terminal shows the exit code"
 
 "$HELPER" >/dev/null 2>"$TMP/usage.err"
 check "helper without arguments exits 2" "2" "$?"

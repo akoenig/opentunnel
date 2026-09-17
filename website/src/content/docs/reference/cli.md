@@ -22,9 +22,23 @@ It also works with `| bash`, and the script is plain text: curl it without the p
 | `OPENTUNNEL_TTL` | `0` | Hard limit in seconds on the whole session. `0` disables it. |
 | `OPENTUNNEL_CWD` | current directory | Working directory for remote commands. |
 | `OPENTUNNEL_KEEP_AUDIT` | unset | `1` copies the session audit log next to where you started the host. |
+| `OPENTUNNEL_SHOW_COMMANDS` | `1` | Print each command and its exit code in the host terminal as it runs. `0` turns it off. |
 | `OPENTUNNEL_BASE_URL` | `https://beta.opentunnel.sh` | Origin the scripts download from. |
 
 Status lines go to stderr with an `[opentunnel]` prefix. Only the prompt goes to stdout, so `curl ... | sh > prompt.txt` captures exactly the prompt.
+
+While the session runs, the host prints what the agent does:
+
+```text
+[opentunnel] active. idle timeout 30m, cwd /srv/app
+[opentunnel] 41287 $ uname -sr && pwd
+[opentunnel] 41287 exit=0
+[opentunnel] 41302 $ ls /nonexistent
+[opentunnel] 41302 exit=2
+[opentunnel] alive, sessions=0, commands=2
+```
+
+The number is the session id, so commands that overlap stay readable. Command lines longer than 200 characters are shortened for display only; the audit log keeps them in full.
 
 The session ends on Ctrl+C, on the idle timeout, on the hard limit, if nobody claims the tunnel in time, or if the claim is malformed.
 

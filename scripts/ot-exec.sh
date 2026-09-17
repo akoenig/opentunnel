@@ -47,8 +47,11 @@ audit_command=${audit_command//\\/\\\\}
 audit_command=${audit_command//$'\n'/\\n}
 audit_command=${audit_command//$'\r'/\\r}
 audit_command=${audit_command//$'\t'/\\t}
-printf '%s\t%s\t%s\t%s\n' \
+# The session pid is the correlation key between the two record kinds, which
+# is what lets the host print overlapping commands without confusing them.
+printf '%s\t%s\t%s\t%s\t%s\n' \
 	"$(ot_now)" \
+	"$$" \
 	"${TAILCAT_PEER_KEY:-unknown}" \
 	"${TAILCAT_REMOTE_ADDR:-unknown}" \
 	"$audit_command" >>"$OPENTUNNEL_WORK/audit.log" 2>/dev/null || true
@@ -59,5 +62,5 @@ cd "$OPENTUNNEL_CWD" 2>/dev/null || cd "$HOME" || exit 1
 bash -lc "$command_line"
 rc=$?
 
-printf '%s\texit=%s\n' "$(ot_now)" "$rc" >>"$OPENTUNNEL_WORK/audit.log" 2>/dev/null || true
+printf '%s\t%s\texit=%s\n' "$(ot_now)" "$$" "$rc" >>"$OPENTUNNEL_WORK/audit.log" 2>/dev/null || true
 exit "$rc"

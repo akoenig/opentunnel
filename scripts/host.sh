@@ -43,6 +43,8 @@ WORK=""
 SERVER_PID=""
 CLAIM_PID=""
 ENDED_REASON=""
+SHOW_COMMANDS=0
+AUDIT_SHOWN=0
 
 ot_log() {
 	printf '[opentunnel] %s\n' "$*" >&2
@@ -188,7 +190,33 @@ ot_command_count() {
 		printf '0'
 		return 0
 	}
-	awk -F'\t' 'NF >= 4 {n++} END {printf "%d", n+0}' "$WORK/audit.log"
+	# Command records have five fields; the exit records that follow have three.
+	awk -F'\t' 'NF >= 5 {n++} END {printf "%d", n+0}' "$WORK/audit.log"
+}
+
+# Prints the audit records written since the last call, so the terminal that
+# opened the tunnel shows what the agent is doing while it happens.
+ot_show_new_audit() {
+	local total pid third command
+	[ "${SHOW_COMMANDS:-0}" -eq 1 ] || return 0
+	[ -n "$WORK" ] && [ -f "$WORK/audit.log" ] || return 0
+	total=$(awk 'END {print NR}' "$WORK/audit.log" 2>/dev/null || true)
+	ot_is_uint "${total:-}" || return 0
+	[ "$total" -gt "$AUDIT_SHOWN" ] || return 0
+	while IFS=$'\t' read -r _ pid third _ command; do
+		case "$third" in
+		exit=*)
+			ot_log "$pid $third"
+			;;
+		*)
+			if [ "${#command}" -gt 200 ]; then
+				command="${command:0:200}…"
+			fi
+			ot_log "$pid \$ $command"
+			;;
+		esac
+	done < <(awk -v from="$((AUDIT_SHOWN + 1))" -v to="$total" 'NR >= from && NR <= to' "$WORK/audit.log" 2>/dev/null)
+	AUDIT_SHOWN=$total
 }
 
 ot_last_activity() {
@@ -234,6 +262,7 @@ ot_cleanup() {
 	trap - EXIT INT TERM
 	ot_stop_process "${CLAIM_PID:-}"
 	ot_stop_process "${SERVER_PID:-}"
+	ot_show_new_audit
 	ot_keep_audit
 	if [ -n "$WORK" ] && [ -d "$WORK" ]; then
 		rm -rf "$WORK"
@@ -337,6 +366,7 @@ ot_end_session() {
 	ENDED_REASON=$1
 	ot_stop_process "$SERVER_PID"
 	SERVER_PID=""
+	ot_show_new_audit
 	ot_log "session ended ($ENDED_REASON). audit log was $WORK/audit.log (removed with the temp dir)"
 }
 
@@ -349,6 +379,7 @@ ot_supervise() {
 			SERVER_PID=""
 			ot_die "the tunnel server exited unexpectedly"
 		fi
+		ot_show_new_audit
 		now=$(date +%s)
 		active=$(ot_active_sessions)
 		last=$(ot_last_activity)
@@ -392,6 +423,8 @@ main() {
 	CLAIM_TIMEOUT=$(ot_uint_env OPENTUNNEL_CLAIM_TIMEOUT 300)
 	IDLE=$(ot_uint_env OPENTUNNEL_IDLE 1800)
 	TTL=$(ot_uint_env OPENTUNNEL_TTL 0)
+	SHOW_COMMANDS=$(ot_uint_env OPENTUNNEL_SHOW_COMMANDS 1)
+	[ "$SHOW_COMMANDS" -eq 0 ] || SHOW_COMMANDS=1
 	CWD="${OPENTUNNEL_CWD:-$PWD}"
 	[ -d "$CWD" ] || ot_die "OPENTUNNEL_CWD is not a directory: $CWD"
 

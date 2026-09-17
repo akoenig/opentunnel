@@ -440,5 +440,6 @@ Answers to the open questions:
 Smaller decisions taken while implementing:
 
 - The generated `ssh` wrapper sets `BatchMode`, `ConnectTimeout`, and `ServerAlive*` so a command against an ended session fails instead of hanging.
+- The supervisor prints each audit record as it appears, so the terminal that opened the tunnel shows every command and its exit code while the agent works (`OPENTUNNEL_SHOW_COMMANDS=0` turns it off). Both audit record kinds carry the session id, which is what keeps concurrent commands readable.
 - `deploy-website.yml` on `main` is `workflow_dispatch` only during the beta, because the v2 copy prepared on `main` must not go live on the apex domain before GA. The `1.x` branch deploys the apex site in the meantime.
 - `scripts/release.sh` exists on `main` with the v2 verification set (shellcheck, bats, embed, `bash -n`); `1.x` keeps its own, re-pointed at the `1.x` branch.

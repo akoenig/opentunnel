@@ -59,7 +59,7 @@ The tunnel address is a bearer secret, and it will end up in your agent's contex
 - **End-to-end encrypted.** Traffic is WireGuard between the two machines, with direct paths when they can be found and public relays otherwise. A relay forwards ciphertext, and there is no control plane and no account anywhere.
 - **Bounded by default.** An unclaimed session expires after 5 minutes, an idle session after 30 minutes, and Ctrl+C ends it at any moment. An optional hard limit caps the total.
 - **Ephemeral keys.** The server key is generated per session and removed with the temp directory, so a leaked address is useless afterwards.
-- **A local audit trail.** Every command line is recorded in the session's audit log on the remote machine. It is removed with the session unless you ask to keep it.
+- **Nothing happens off screen.** The host terminal prints every command as it starts and its exit code when it ends, so you can watch the agent work. The same lines go to the session's audit log, which is removed with the session unless you ask to keep it.
 
 What OpenTunnel does *not* protect against is documented in [Security notes](#security-notes) and, in full, in the [security model](https://opentunnel.sh/concepts/security-model/).
 
@@ -94,6 +94,7 @@ All of them are environment variables, all of them are seconds unless noted.
 | `OPENTUNNEL_TTL` | `0` (off) | Hard limit on the total session length. |
 | `OPENTUNNEL_CWD` | `$PWD` | Working directory for remote commands. |
 | `OPENTUNNEL_KEEP_AUDIT` | unset | `1` copies the audit log next to where you started the host. |
+| `OPENTUNNEL_SHOW_COMMANDS` | `1` | Print each command and its exit code in the host terminal as it runs. `0` turns it off. |
 | `OPENTUNNEL_CONNECT_TIMEOUT` | `90` | Agent side: how long to wait for the tunnel to come up. |
 | `OPENTUNNEL_CONTROL_PERSIST` | `600` | Agent side: how long the shared connection stays open when idle. |
 | `OPENTUNNEL_BASE_URL` | `https://beta.opentunnel.sh` | Where both scripts download from. |
@@ -106,7 +107,7 @@ Residual, by design:
 
 - **The unclaimed window is a race.** Whoever connects first is pinned. The window is at most 5 minutes and the address exists only in your clipboard and your agent's context. If a foreign key claims it, the host logs the key prefix and ends; you rerun for a fresh address.
 - **The agent gets your account.** For the lifetime of the session, the agent (and its model provider) can run anything you can, including reading and writing files. There is no command allowlist. `audit.log` records every command line, never payloads.
-- **Without a hard limit, an active agent keeps the session alive.** The heartbeat and the audit log make that visible, and Ctrl+C always ends it.
+- **Without a hard limit, an active agent keeps the session alive.** The live command output, the heartbeat, and the audit log make that visible, and Ctrl+C always ends it.
 - **Public relays can rate-limit or disappear.** Beta uses the public Tailscale DERP relays.
 - **Upstream tailcat is experimental.** Its threat model assumes one trusted operator on both ends, which is exactly this use case.
 
