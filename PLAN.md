@@ -105,7 +105,7 @@ opentunnel/
 │   ├── embed.sh                inlines ot-exec.sh + version + checksums into scripts → dist/
 │   └── TAILCAT_COMMIT          pinned upstream commit
 ├── site/
-│   ├── wrangler.jsonc          Worker `opentunnel-beta`, assets dir = ./dist, custom domain beta.opentunnel.sh
+│   ├── wrangler.jsonc          Worker `opentunnel`, assets dir = ./dist, custom domain beta.opentunnel.sh
 │   └── worker/index.js         maps / → host.sh, /agent → agent.sh, everything else → assets
 ├── test/
 │   ├── unit/*.bats             pure-function tests (arch mapping, validation, prompt rendering)
@@ -301,7 +301,7 @@ Exit codes of `remote` are the remote command's exit codes (ssh passes them thro
 
 ## 11. Hosting (`site/`, Cloudflare)
 
-- One Worker `opentunnel-beta` with static assets from `site/dist` (copied from `dist/` at deploy time), custom domain `beta.opentunnel.sh`. `worker/index.js` rewrites `/` → `host.sh` and `/agent` → `agent.sh` via `env.ASSETS.fetch`, everything else falls through to assets. No proxying, no redirects to other hosts.
+- One Worker `opentunnel` with static assets from `site/dist` (copied from `dist/` at deploy time), custom domain `beta.opentunnel.sh`. `worker/index.js` rewrites `/` → `host.sh` and `/agent` → `agent.sh` via `env.ASSETS.fetch`, everything else falls through to assets. No proxying, no redirects to other hosts.
 - Scripts: `Content-Type: text/plain; charset=utf-8`, `Cache-Control: no-cache`.
 - `/bin/<VERSION>/…`: `Cache-Control: public, max-age=31536000, immutable`.
 - `release.yml` runs on tag push: build binaries, embed, `wrangler deploy` from `site/`. Keep previous `bin/<version>` directories in the assets so an already-printed prompt keeps working during a deploy (assets are additive per deploy; the workflow downloads the previous release's `bin/` directories before deploying).

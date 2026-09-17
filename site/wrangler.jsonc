@@ -4,7 +4,7 @@
 // repository root dist/ at deploy time).
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "opentunnel-beta",
+	"name": "opentunnel",
 	"compatibility_date": "2026-06-01",
 	"main": "worker/index.js",
 	"assets": {
