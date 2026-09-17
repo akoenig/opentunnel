@@ -91,6 +91,6 @@ scp -O -S /tmp/opentunnel-agent.XXXXXX/ssh ./file opentunnel:/srv/app/
 | Code | Meaning |
 |---|---|
 | remote command's code | The command ran. `remote` exits with exactly what it returned. |
-| `2` | Usage error, or a session without a command (interactive shells are refused). |
+| `2` | Usage error, or a session that carried no command at all (a bare login shell is refused). |
 | `255` | The tunnel is gone: the session ended, or it was never reachable. Report it and stop, do not retry in a loop. |
 | `1` | The host or the installer failed. The message says why. |

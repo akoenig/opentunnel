@@ -30,7 +30,8 @@
 - Keys are ephemeral and live only in the temp directory. The tunnel address is a bearer secret until the claim, and useless afterwards.
 - Lifetime is enforced outside tailcat: claim window, idle timeout, optional hard limit, Ctrl+C. tailcat itself has no timeouts.
 - The agent runs every command through one shared SSH connection (`ControlMaster`) over a single tailcat client. A second tailcat client process using the same node key fights the first for the connection, so never spawn one per command.
-- Commands run through the ForceCommand wrapper: no interactive shells, session markers for the supervisor, one audit line per command (command lines only, never payloads).
+- Commands run through the ForceCommand wrapper: no bare login shells, session markers for the supervisor, a live line on the host terminal, one audit line per session (command lines only, never payloads). The wrapper also refuses to run when the supervisor is gone, so an orphaned tunnel cannot keep serving.
+- Be accurate about what that enforces. A client can still request a PTY, and the audit log records the command line it was asked to run, not what that command then does. Do not write copy that claims otherwise.
 - Concurrent commands and file transfer are in scope. Still excluded without explicit approval: accounts, dashboards, package-manager distribution, install-to-system flows, daemon mode, PTY, multiple clients for one tunnel, approval workflows, MCP, persistent state of any kind.
 
 ## Dependency And Artifact Hygiene
@@ -48,7 +49,7 @@
 - Keep font ligatures disabled in code contexts; Geist Mono otherwise fuses `--` into a single long dash.
 - Verify website changes with `pnpm build`; judge visuals with `pnpm preview:worker`, not the dev server (Vite injects styles late in dev and misrepresents fonts and layout).
 - After Starlight or Expressive Code config changes, stale page HTML can reference outdated hashed assets; clear with `rm -rf node_modules/.astro .astro` and rebuild.
-- Pushes to `main` touching `website/**` deploy automatically via `.github/workflows/deploy-website.yml` (requires the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets).
+- `.github/workflows/deploy-website.yml` is manual during the beta, so the v2 copy does not reach the apex domain before GA. Every push to `main` that touches the scripts, the build, or `site/` does deploy to beta.opentunnel.sh via `deploy-beta.yml`. Both need the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 - The website is the canonical home of public docs; keep `README.md` consistent with it when messaging or command shapes change.
 
 ## Writing Style

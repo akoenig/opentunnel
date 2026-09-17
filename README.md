@@ -101,12 +101,13 @@ All of them are environment variables, all of them are seconds unless noted.
 
 ## Security notes
 
-Mitigated: address leakage after the claim (the peer is pinned), stale addresses (the server key is ephemeral), unattended sessions (claim window, idle timeout, optional hard limit, Ctrl+C), binary tampering (pinned upstream commit, pinned sha256 in the script, HTTPS), interactive shells (the wrapper refuses a session without a command).
+Mitigated: address leakage after the claim (the peer is pinned), stale addresses (the server key is ephemeral), unattended sessions (claim window, idle timeout, optional hard limit, Ctrl+C), orphaned sessions (a session whose supervisor is gone ends the tunnel instead of serving), binary tampering (pinned upstream commit, pinned sha256 in the script, HTTPS), bare login shells (the wrapper refuses a session that carries no command).
 
 Residual, by design:
 
 - **The unclaimed window is a race.** Whoever connects first is pinned. The window is at most 5 minutes and the address exists only in your clipboard and your agent's context. If a foreign key claims it, the host logs the key prefix and ends; you rerun for a fresh address.
-- **The agent gets your account.** For the lifetime of the session, the agent (and its model provider) can run anything you can, including reading and writing files. There is no command allowlist. `audit.log` records every command line, never payloads.
+- **The agent gets your account.** For the lifetime of the session, the agent (and its model provider) can run anything you can, including reading and writing files. There is no command allowlist.
+- **The audit trail is cooperative.** `audit.log` records the command line of each session, never payloads, so it is a faithful history of an honest agent and not much use against one that hides its work inside `bash` on stdin. A client that asks for a PTY gets one; the `remote` helper never does.
 - **A leaked client key is full access until the session ends.** It works from any machine, and the audit log cannot tell the thief from the agent: attribution is to the key, not the machine. Treat the agent machine as fully trusted, because it is.
 - **Without a hard limit, an active agent keeps the session alive.** The live command output, the heartbeat, and the audit log make that visible, and Ctrl+C always ends it.
 - **Public relays can rate-limit or disappear.** Beta uses the public Tailscale DERP relays.
@@ -130,7 +131,7 @@ test/e2e.sh                                  # real session on this machine, nee
 |---|---|
 | `scripts/host.sh` | Served at `/`. Opens the session, prints the prompt, supervises the lifetime. |
 | `scripts/agent.sh` | Served at `/agent`. Claims the tunnel and writes the `remote` helper. |
-| `scripts/ot-exec.sh` | Runs on the remote machine for every command: audit, activity, no interactive shells. |
+| `scripts/ot-exec.sh` | Runs on the remote machine for every session: audit, activity, live display, supervisor check. |
 | `build/` | Builds tailcat from `build/TAILCAT_COMMIT` and embeds version, checksums, and the wrapper. |
 | `site/` | The Cloudflare Worker serving `dist/` at beta.opentunnel.sh. |
 | `website/` | The [opentunnel.sh](https://opentunnel.sh) site. |

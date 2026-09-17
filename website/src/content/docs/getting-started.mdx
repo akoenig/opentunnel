@@ -79,7 +79,7 @@ scp -O -S /tmp/opentunnel-agent.XXXXXX/ssh ./file opentunnel:/srv/app/
 
 ## Good to know
 
-- Commands must be **non-interactive**: there is no PTY and no stdin from a terminal. Avoid `sudo` unless it is passwordless.
+- Commands should be **non-interactive**: the `remote` helper never asks for a terminal, so anything that waits for input will hang rather than prompt. Avoid `sudo` unless it is passwordless.
 - **One agent per tunnel.** The first client to claim the tunnel is pinned to it; a second machine cannot join. This is part of the [security model](/concepts/security-model/), not a limitation to engineer around.
 - Commands run in a **login shell** in the session working directory, so your `.profile` environment is available. Anything that profile prints goes into the command output too.
 - The session ends by itself after 30 minutes without a command. Set `OPENTUNNEL_TTL` if you also want a hard limit on the total, and `OPENTUNNEL_CWD` to choose the working directory. The full list is in the [CLI reference](/reference/cli/).

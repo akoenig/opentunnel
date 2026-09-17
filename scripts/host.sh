@@ -229,6 +229,12 @@ ot_show_new_audit() {
 	AUDIT_SHOWN=$total
 }
 
+# tailcat's log can echo strings the client influenced, so it never reaches
+# the terminal raw.
+ot_server_log_tail() {
+	tail -n 3 "$WORK/server.log" 2>/dev/null | tr '\000-\010\013-\037\177' '?' || true
+}
+
 ot_last_activity() {
 	local value=""
 	[ -f "$WORK/activity" ] && value=$(cat "$WORK/activity" 2>/dev/null || true)
@@ -260,7 +266,16 @@ ot_keep_audit() {
 	[ -n "$WORK" ] && [ -f "$WORK/audit.log" ] || return 0
 	stamp=$(date -u +%Y%m%dT%H%M%SZ)
 	target="$LAUNCH_PWD/opentunnel-audit-$stamp.log"
-	if cp "$WORK/audit.log" "$target" 2>/dev/null; then
+	# The name is predictable to the second, so create the file rather than
+	# writing to whatever is there: noclobber makes the open fail on an
+	# existing file and on a symlink, which is what stops a shared working
+	# directory from turning this into an overwrite of someone else's file.
+	# The log holds command lines, so keep it to the owner.
+	if (
+		umask 077
+		set -C
+		cat "$WORK/audit.log" >"$target"
+	) 2>/dev/null; then
 		ot_log "audit log kept at $target"
 	else
 		ot_log "warning: could not write the audit log to $target"
@@ -356,7 +371,7 @@ ot_phase_two() {
 			break
 		fi
 		if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-			ot_log "$(tail -n 3 "$WORK/server.log" 2>/dev/null || true)"
+			ot_log "$(ot_server_log_tail)"
 			ot_die "the tunnel server exited during startup"
 		fi
 		if [ "$waited" -ge 30 ]; then
@@ -385,7 +400,7 @@ ot_supervise() {
 	heartbeat_at=$(date +%s)
 	while :; do
 		if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-			ot_log "$(tail -n 3 "$WORK/server.log" 2>/dev/null || true)"
+			ot_log "$(ot_server_log_tail)"
 			SERVER_PID=""
 			ot_die "the tunnel server exited unexpectedly"
 		fi

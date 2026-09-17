@@ -31,10 +31,16 @@ An agent that keeps issuing commands keeps an idle-limited session alive indefin
 
 Every SSH session on the remote machine runs one wrapper script in place of a shell (OpenSSH calls this a forced command). The wrapper:
 
-- refuses sessions without a command, so there is no interactive shell and no PTY;
-- appends one line per command to the session audit log: timestamp, session id, peer key, peer address, and the command line, never the data piped through it, followed by a second line with the exit code;
+- refuses a session that carries no command, so nobody gets a bare login shell;
+- appends one line per session to the audit log: timestamp, session id, peer key, peer address, and the command line it was asked to run, never the data piped through it, followed by a second line with the exit code;
 - marks the session as running so the idle timer cannot end the session under an active command;
 - runs the command with `bash -lc` in the session working directory, so your agent gets the same environment you would get on login.
+
+Two things that wrapper does **not** do, both worth knowing before you rely on it:
+
+**It constrains what runs, not how.** The `remote` helper never asks for a terminal, so commands normally run without one, but a client that explicitly requests a PTY gets one: `ssh -tt` through the generated wrapper reaches an interactive `bash`. The forced command means every session starts in the wrapper; it does not mean every session is non-interactive.
+
+**The audit log records invocations, not behaviour.** It captures the command line the client asked for. What that command then does is invisible, so `remote bash` with a script on stdin appears as a single line reading `bash`, and everything inside it goes unrecorded. Against an honest agent the log is a faithful history. Against one that wants to hide, it is not, and no amount of logging at this layer would change that.
 
 There is no command allowlist. Granting a tunnel means granting command execution as your user for the lifetime of the session, including reading and writing files. Scope what the agent can reach accordingly, and end the session when the task is done.
 
@@ -58,7 +64,9 @@ The host script is the process that enforces the lifetime and removes the keys. 
 
 ## The audit log
 
-The audit log lives on the remote machine, in the session's temp directory, and is removed with it. Set `OPENTUNNEL_KEEP_AUDIT=1` to copy it next to where you started the host when the session ends. It records command lines only, never payloads.
+The audit log lives on the remote machine, in the session's temp directory, and is removed with it. Set `OPENTUNNEL_KEEP_AUDIT=1` to copy it next to where you started the host when the session ends; the copy is created fresh and owner-readable, and an existing file or a symlink at that name is refused rather than written through.
+
+It records command lines only, never payloads. That cuts both ways: a file you upload never appears in the log, and neither does anything an uploaded script then does. Command lines themselves are not redacted, so a secret passed as an argument (`curl -H 'Authorization: ...'`) is recorded in full, shown on the terminal, and written to disk if you keep the log.
 
 ## Binaries and checksums
 
@@ -71,5 +79,6 @@ This is not a defence against a compromised origin: whoever can change the binar
 - **The claim race.** Whoever connects first is pinned. Keep the window short and do not publish the address.
 - **The agent machine is fully trusted.** Its model provider sees everything the agent sends and receives.
 - **No sandbox.** Commands run as your user, with your environment.
+- **The audit trail is cooperative.** It records what was asked for, not what happened, and a PTY is available to a client that asks for one.
 - **Public relays.** They can rate-limit or become unavailable. A self-hosted relay is a one-flag change in a future release.
 - **tailcat is experimental.** Its own threat model assumes a single trusted operator on both ends, which is exactly this use case. It has not had a third-party audit.
