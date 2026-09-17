@@ -44,8 +44,14 @@ export default {
 			if (!asset.ok) {
 				return new Response('not found\n', { status: 404 });
 			}
+			// A released version is addressed by its version and never changes.
+			// Development builds reuse /bin/dev/ on every push to main, so that
+			// path must never be cached.
+			const immutable = !url.pathname.startsWith('/bin/dev/');
 			return withHeaders(asset, {
-				'cache-control': 'public, max-age=31536000, immutable',
+				'cache-control': immutable
+					? 'public, max-age=31536000, immutable'
+					: 'no-cache',
 			});
 		}
 

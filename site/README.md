@@ -8,11 +8,11 @@ The Cloudflare Worker that serves the v2 scripts and the pinned tailcat binaries
 | `/agent` | `agent.sh` |
 | `/bin/<version>/…` | `tailcat_<os>_<arch>`, `SHA256SUMS`, `LICENSE.tailcat` |
 
-Scripts are served as `text/plain` with `Cache-Control: no-cache`, binaries as immutable assets. Everything else is a 404; the worker never proxies and never redirects to another host.
+Scripts are served as `text/plain` with `Cache-Control: no-cache`. Released binaries are immutable, addressed by version. Development binaries under `/bin/dev/` are served uncached, because every push to `main` replaces them in place. Everything else is a 404; the worker never proxies and never redirects to another host.
 
 ## Deploying
 
-`.github/workflows/release.yml` does this on a tag push. By hand:
+`.github/workflows/deploy-beta.yml` deploys every push to `main` as version `dev`, and `.github/workflows/release.yml` deploys tagged releases. By hand:
 
 ```bash
 build/build-tailcat.sh        # from the repository root, needs Go

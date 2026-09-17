@@ -133,6 +133,8 @@ test/e2e.sh                                  # real session on this machine, nee
 | `site/` | The Cloudflare Worker serving `dist/` at beta.opentunnel.sh. |
 | `website/` | The [opentunnel.sh](https://opentunnel.sh) site. |
 
+During the beta every push to `main` that touches the scripts, the build, or the site deploys to `beta.opentunnel.sh` as version `dev`, so the current state of `main` is always test drivable with the normal one-liner. Those binaries live at `/bin/dev/` and are served uncached; released versions are immutable.
+
 Cutting a release is `scripts/release.sh [patch|minor|major]`: it bumps `VERSION`, runs the verification set, tags, publishes, and reopens development. The tag push builds the binaries and deploys the beta Worker.
 
 OpenTunnel builds on [tailcat](https://github.com/tailscale/tailcat) by Tailscale (BSD-3-Clause). The binaries we serve are built from a pinned upstream commit and ship with `LICENSE.tailcat`.

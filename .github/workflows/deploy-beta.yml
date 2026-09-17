@@ -1,0 +1,125 @@
+name: Deploy Beta
+
+# Continuous deployment of main to beta.opentunnel.sh during the v2 beta, so
+# the scripts can be test driven without cutting a release. The version on main
+# is "dev", so everything lands under /bin/dev/, which the worker serves
+# uncached. Tagged releases go out through release.yml instead.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/**'
+      - 'build/**'
+      - 'site/**'
+      - 'VERSION'
+      - '.github/workflows/deploy-beta.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-beta
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.3
+
+      - name: Install shellcheck and bats
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" |
+            tar -xJ -C /tmp
+          sudo install "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          sudo apt-get update
+          sudo apt-get install -y bats
+
+      - name: Shellcheck
+        run: shellcheck -s bash scripts/*.sh build/*.sh test/e2e.sh
+
+      - name: Unit tests
+        run: bats test/unit
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.3
+
+      - name: Read the version and the pinned tailcat commit
+        id: pins
+        run: |
+          set -euo pipefail
+          {
+            echo "version=$(tr -d '[:space:]' < VERSION)"
+            echo "commit=$(tr -d '[:space:]' < build/TAILCAT_COMMIT)"
+          } >> "$GITHUB_OUTPUT"
+
+      # The binaries only change when the version or the pinned commit does,
+      # so most pushes skip the build entirely.
+      - name: Restore the tailcat binaries
+        id: binaries
+        uses: actions/cache@v4
+        with:
+          path: dist/bin
+          key: tailcat-${{ steps.pins.outputs.version }}-${{ steps.pins.outputs.commit }}
+
+      - name: Check out tailcat
+        if: steps.binaries.outputs.cache-hit != 'true'
+        uses: actions/checkout@v6.0.3
+        with:
+          repository: tailscale/tailcat
+          ref: ${{ steps.pins.outputs.commit }}
+          path: .tailcat-src
+
+      - name: Set up Go
+        if: steps.binaries.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version-file: .tailcat-src/go.mod
+          cache: false
+
+      - name: Build the tailcat binaries
+        if: steps.binaries.outputs.cache-hit != 'true'
+        env:
+          TAILCAT_SRC: .tailcat-src
+        run: build/build-tailcat.sh
+
+      - name: Embed the served scripts
+        run: build/embed.sh
+
+      - name: Stage the assets
+        run: |
+          set -euo pipefail
+          rm -rf site/dist
+          mkdir -p site/dist
+          cp dist/host.sh dist/agent.sh site/dist/
+          cp -R dist/bin site/dist/bin
+
+      - name: Deploy the beta worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: site
+          command: deploy
+
+      - name: Smoke test the published scripts
+        run: |
+          set -euo pipefail
+          version="${{ steps.pins.outputs.version }}"
+          curl -fsSL https://beta.opentunnel.sh | head -n 2
+          curl -fsSL https://beta.opentunnel.sh/agent | head -n 2
+          for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            curl -fsSL -o "/tmp/tailcat_$target" "https://beta.opentunnel.sh/bin/$version/tailcat_$target"
+          done
+          (cd /tmp && sha256sum -c <(sed 's#tailcat_#/tmp/tailcat_#' "$GITHUB_WORKSPACE/dist/bin/$version/SHA256SUMS"))
