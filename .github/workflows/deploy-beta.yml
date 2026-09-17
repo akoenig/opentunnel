@@ -111,6 +111,20 @@ jobs:
           cp dist/host.sh dist/agent.sh site/dist/
           cp -R dist/bin site/dist/bin
 
+      # wrangler-action picks the package manager from the lockfile in the
+      # working directory, so site/pnpm-lock.yaml means pnpm has to be here.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.0.8
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+
       # v4 or newer: older wrangler releases cannot read wrangler.jsonc.
       - name: Deploy the beta worker
         uses: cloudflare/wrangler-action@v4.0.0
