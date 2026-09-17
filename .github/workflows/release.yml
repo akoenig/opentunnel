@@ -90,8 +90,10 @@ jobs:
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          curl -fsSL https://beta.opentunnel.sh | head -n 2
-          curl -fsSL https://beta.opentunnel.sh/agent | head -n 2
+          curl -fsSL -o /tmp/host.sh https://beta.opentunnel.sh
+          curl -fsSL -o /tmp/agent.sh https://beta.opentunnel.sh/agent
+          cmp /tmp/host.sh dist/host.sh
+          cmp /tmp/agent.sh dist/agent.sh
           for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
             curl -fsSL -o "/tmp/tailcat_$target" "https://beta.opentunnel.sh/bin/$version/tailcat_$target"
           done
