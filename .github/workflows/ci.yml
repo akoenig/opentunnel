@@ -13,10 +13,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.3
 
+      # Pinned: distribution shellcheck versions disagree about which codes
+      # they emit, so an unpinned one turns unrelated pushes red.
       - name: Install shellcheck and bats
+        env:
+          SHELLCHECK_VERSION: v0.11.0
         run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" |
+            tar -xJ -C /tmp
+          sudo install "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
           sudo apt-get update
-          sudo apt-get install -y shellcheck bats
+          sudo apt-get install -y bats
 
       - name: Shellcheck
         run: shellcheck -s bash scripts/*.sh build/*.sh test/e2e.sh

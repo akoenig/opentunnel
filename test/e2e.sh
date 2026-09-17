@@ -50,7 +50,8 @@ check() {
 	fi
 }
 
-# shellcheck disable=SC2329
+# Invoked by the trap below (SC2317 in shellcheck 0.9, SC2329 in 0.11).
+# shellcheck disable=SC2317,SC2329
 cleanup() {
 	[ -n "$HOST_PID" ] && kill "$HOST_PID" 2>/dev/null
 	[ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null
