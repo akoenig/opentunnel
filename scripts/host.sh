@@ -45,6 +45,7 @@ CLAIM_PID=""
 ENDED_REASON=""
 SHOW_COMMANDS=0
 AUDIT_SHOWN=0
+HOST_TTY=""
 
 ot_log() {
 	printf '[opentunnel] %s\n' "$*" >&2
@@ -194,14 +195,22 @@ ot_command_count() {
 	awk -F'\t' 'NF >= 5 {n++} END {printf "%d", n+0}' "$WORK/audit.log"
 }
 
-# Prints the audit records written since the last call, so the terminal that
-# opened the tunnel shows what the agent is doing while it happens.
+# Prints the audit records written since the last call. When the host runs in
+# a terminal the wrapper writes there directly, before each command runs, and
+# this is not used; it is the fallback for a host whose stderr is a file.
+# A shrinking log is reported rather than silently skipped: a command that
+# truncates the audit log must not be able to hide what follows it.
 ot_show_new_audit() {
 	local total pid third command
 	[ "${SHOW_COMMANDS:-0}" -eq 1 ] || return 0
+	[ -z "${HOST_TTY:-}" ] || return 0
 	[ -n "$WORK" ] && [ -f "$WORK/audit.log" ] || return 0
 	total=$(awk 'END {print NR}' "$WORK/audit.log" 2>/dev/null || true)
 	ot_is_uint "${total:-}" || return 0
+	if [ "$total" -lt "$AUDIT_SHOWN" ]; then
+		ot_log "warning: the audit log shrank from $AUDIT_SHOWN to $total lines; a command truncated it"
+		AUDIT_SHOWN=0
+	fi
 	[ "$total" -gt "$AUDIT_SHOWN" ] || return 0
 	while IFS=$'\t' read -r _ pid third _ command; do
 		case "$third" in
@@ -215,7 +224,8 @@ ot_show_new_audit() {
 			ot_log "$pid \$ $command"
 			;;
 		esac
-	done < <(awk -v from="$((AUDIT_SHOWN + 1))" -v to="$total" 'NR >= from && NR <= to' "$WORK/audit.log" 2>/dev/null)
+	# Neutralize control characters, keeping the tab separators and newlines.
+	done < <(awk -v from="$((AUDIT_SHOWN + 1))" -v to="$total" 'NR >= from && NR <= to' "$WORK/audit.log" 2>/dev/null | tr '\000-\010\013-\037\177' '?')
 	AUDIT_SHOWN=$total
 }
 
@@ -431,9 +441,18 @@ main() {
 	ot_download_tailcat
 	ot_write_exec_wrapper
 	chmod 700 "$WORK/ot-exec.sh"
+	# With a terminal on stderr the wrapper shows each command there itself,
+	# before running it, so the line is on screen whatever the command does.
+	HOST_TTY=""
+	if [ "$SHOW_COMMANDS" -eq 1 ] && [ -t 2 ]; then
+		HOST_TTY=$(tty <&2 2>/dev/null || true)
+		[ -w "$HOST_TTY" ] || HOST_TTY=""
+	fi
 	{
 		printf 'OPENTUNNEL_WORK=%q\n' "$WORK"
 		printf 'OPENTUNNEL_CWD=%q\n' "$CWD"
+		printf 'OPENTUNNEL_SUPERVISOR_PID=%q\n' "$$"
+		printf 'OPENTUNNEL_TTY=%q\n' "$HOST_TTY"
 	} >"$WORK/env"
 	mkdir -p "$WORK/sessions"
 

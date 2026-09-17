@@ -42,7 +42,19 @@ Because commands run in a login shell, anything your shell profile prints on sta
 
 ## Watching the session
 
-The terminal that opened the tunnel prints every command as it starts and its exit code when it ends, prefixed with the session id so concurrent commands stay readable. There is no way for the agent to run something that does not appear there: the wrapper writes the record before it runs the command. Set `OPENTUNNEL_SHOW_COMMANDS=0` if you would rather have a quiet terminal, and the records still go to the audit log.
+The terminal that opened the tunnel shows every command as it starts and its exit code when it ends, prefixed with the session id so concurrent commands stay readable. The wrapper writes that line to the terminal itself, before it runs the command, and it replaces control characters first, so a command line cannot carry terminal escape sequences onto your screen. Set `OPENTUNNEL_SHOW_COMMANDS=0` if you would rather have a quiet terminal; the records still go to the audit log.
+
+Be precise about what this is: a view for you, not a barrier for a hostile agent. Anything that runs as your user can also write to your terminal, so a determined attacker with command execution can forge lines or erase them by other means. What the design guarantees is narrower and still useful: an honest agent's activity is always visible, and the cheap tricks (escape sequences in the command line, truncating the audit log) are neutralized or reported.
+
+## If the client key leaks
+
+The agent's client key is the only credential after the claim. Whoever holds it, together with the address that sits next to it in the same directory, has full command execution as your user from any machine, for the rest of the session. There is no second factor and no way to tell the thief from the agent in the audit log: both records carry the same key and the same tunnel address, because both derive from that key. Attribution in the audit log is to a key, not to a machine.
+
+It does end with the session. Once the host process exits the server key is gone and the address never works again. Keep sessions short, use `OPENTUNNEL_TTL` for unattended work, and treat the agent machine as fully trusted, because it is.
+
+## If the supervisor dies
+
+The host script is the process that enforces the lifetime and removes the keys. A command can kill it, and so can an out-of-memory kill. Every SSH session checks that the supervisor is still there before running its command; if it is gone, the wrapper refuses the command, ends the tunnel server, and removes the session directory, so an orphaned tunnel cannot keep serving. This closes the accidental case completely. A hostile agent can defeat it by editing the wrapper first, which is the same as saying that an attacker running as your user can do anything you can.
 
 ## The audit log
 

@@ -160,7 +160,8 @@ ot_claim() {
 	pub=$("$TC" genkey --client --key="$WORK/client.private.json" 2>"$WORK/genkey.log" |
 		grep -o 'nodekey:[0-9a-f]\{64\}' | head -n 1) || true
 	[ -n "$pub" ] || ot_die "could not generate a client key: $(tail -n 2 "$WORK/genkey.log" 2>/dev/null || true)"
-	ot_log "claiming the tunnel"
+	# The host prints the key it was claimed by; this is what it should show.
+	ot_log "claiming the tunnel as nodekey:$(printf '%s' "${pub#nodekey:}" | cut -c1-12)…"
 	(printf '%s\n' "$pub" | "$TC" --key="$WORK/client.private.json" "$ADDR" >"$WORK/claim.out" 2>"$WORK/claim.log") &
 	CLAIM_PID=$!
 }

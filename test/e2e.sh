@@ -158,6 +158,15 @@ check "remote exit code passthrough" "7" "$?"
 wait_for_log '\$ echo hi; pwd' && ok "host terminal shows the command" || fail "host terminal shows the command"
 wait_for_log 'exit=7' && ok "host terminal shows the exit code" || fail "host terminal shows the exit code"
 
+say "hostile command lines"
+"$HELPER" "$(printf 'echo escaped\033[2K\033]0;pwned\007')" >/dev/null 2>&1
+wait_for_log 'echo escaped?\[2K' && ok "escape sequences are neutralized on the host terminal" || fail "escape sequences are neutralized on the host terminal"
+grep -q $'\033' "$HOST_ERR" && fail "no raw ESC byte reaches the host terminal" || ok "no raw ESC byte reaches the host terminal"
+"$HELPER" 'echo hidden-attempt; : > /tmp/opentunnel-host.*/audit.log' >/dev/null 2>&1
+"$HELPER" 'echo after-truncation' >/dev/null 2>&1
+wait_for_log 'audit log shrank' && ok "truncating the audit log is reported" || fail "truncating the audit log is reported"
+wait_for_log 'echo after-truncation' && ok "commands after a truncation are still shown" || fail "commands after a truncation are still shown"
+
 "$HELPER" >/dev/null 2>"$TMP/usage.err"
 check "helper without arguments exits 2" "2" "$?"
 
@@ -245,7 +254,9 @@ fi
 kept=$(ls opentunnel-audit-*.log 2>/dev/null | head -n 1)
 if [ -n "$kept" ]; then
 	ok "OPENTUNNEL_KEEP_AUDIT wrote $kept"
-	grep -q 'echo hi' "$kept" && ok "audit log records command lines" || fail "audit log records command lines"
+	# The hostile-command check truncated the log earlier, so look for a
+	# command that ran after that.
+	grep -q 'echo after-truncation' "$kept" && ok "audit log records command lines" || fail "audit log records command lines"
 	rm -f "$kept"
 else
 	fail "OPENTUNNEL_KEEP_AUDIT wrote an audit log"
@@ -352,6 +363,36 @@ if wait_for_addr; then
 	fi
 else
 	fail "fifth session came up"
+fi
+HOST_PID=""
+
+######################################################################
+say "session 6: a command kills the supervisor"
+start_host s6 OPENTUNNEL_IDLE=300 OPENTUNNEL_CWD="$REMOTE_CWD"
+if wait_for_addr && install_agent; then
+	AGENT_WORK=$(dirname "$HELPER")
+	"$HELPER" "kill -9 $HOST_PID" >/dev/null 2>&1
+	sleep 1
+	kill -0 "$HOST_PID" 2>/dev/null && fail "the supervisor was killed" || ok "the supervisor was killed"
+	timeout 60 "$HELPER" 'echo orphan-command' >"$TMP/orphan.out" 2>"$TMP/orphan.err"
+	rc=$?
+	[ "$rc" -ne 0 ] && ok "the next command is refused (rc=$rc)" || fail "the next command is refused"
+	grep -q 'orphan-command' "$TMP/orphan.out" && fail "the refused command did not run" || ok "the refused command did not run"
+	grep -q 'the session has ended' "$TMP/orphan.err" && ok "the client is told the session ended" || fail "the client is told the session ended"
+	waited=0
+	while pgrep -f 'tailcat.*serve --allow' >/dev/null 2>&1 && [ "$waited" -lt 15 ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+	pgrep -f 'tailcat.*serve --allow' >/dev/null 2>&1 && fail "the orphaned tunnel server was ended" || ok "the orphaned tunnel server was ended after ${waited}s"
+	[ -z "$(ls -d /tmp/opentunnel-host.* 2>/dev/null)" ] && ok "the host temp directory was removed" || fail "the host temp directory was removed"
+	timeout 60 "$HELPER" 'echo still-there' >/dev/null 2>&1
+	rc=$?
+	[ "$rc" -ne 0 ] && ok "later commands fail (rc=$rc)" || fail "later commands fail"
+	"$HELPER" --close >/dev/null 2>&1
+	HELPER=""
+else
+	fail "sixth session came up"
 fi
 HOST_PID=""
 

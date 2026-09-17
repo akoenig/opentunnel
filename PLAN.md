@@ -440,6 +440,8 @@ Answers to the open questions:
 Smaller decisions taken while implementing:
 
 - The generated `ssh` wrapper sets `BatchMode`, `ConnectTimeout`, and `ServerAlive*` so a command against an ended session fails instead of hanging.
-- The supervisor prints each audit record as it appears, so the terminal that opened the tunnel shows every command and its exit code while the agent works (`OPENTUNNEL_SHOW_COMMANDS=0` turns it off). Both audit record kinds carry the session id, which is what keeps concurrent commands readable.
+- The terminal that opened the tunnel shows every command and its exit code while the agent works (`OPENTUNNEL_SHOW_COMMANDS=0` turns it off). The wrapper writes the line to the host terminal itself, before running the command, with control characters replaced; without a terminal the supervisor prints from the audit log instead and reports a shrinking log. Both audit record kinds carry the session id, which is what keeps concurrent commands readable.
+- Every SSH session checks that the supervisor is alive before running its command (`OPENTUNNEL_SUPERVISOR_PID` in the env file). If it is gone, the wrapper refuses the command, ends the tunnel server, and removes the session directory. Found by test: `kill -9` of the supervisor skipped the EXIT trap and left the tunnel serving with no lifetime and no Ctrl+C.
+- The installer prints the prefix of its own client key, so the host's "claimed by" line can be checked against it during the unclaimed window.
 - `deploy-website.yml` on `main` is `workflow_dispatch` only during the beta, because the v2 copy prepared on `main` must not go live on the apex domain before GA. The `1.x` branch deploys the apex site in the meantime.
 - `scripts/release.sh` exists on `main` with the v2 verification set (shellcheck, bats, embed, `bash -n`); `1.x` keeps its own, re-pointed at the `1.x` branch.

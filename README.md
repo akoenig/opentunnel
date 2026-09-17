@@ -107,6 +107,7 @@ Residual, by design:
 
 - **The unclaimed window is a race.** Whoever connects first is pinned. The window is at most 5 minutes and the address exists only in your clipboard and your agent's context. If a foreign key claims it, the host logs the key prefix and ends; you rerun for a fresh address.
 - **The agent gets your account.** For the lifetime of the session, the agent (and its model provider) can run anything you can, including reading and writing files. There is no command allowlist. `audit.log` records every command line, never payloads.
+- **A leaked client key is full access until the session ends.** It works from any machine, and the audit log cannot tell the thief from the agent: attribution is to the key, not the machine. Treat the agent machine as fully trusted, because it is.
 - **Without a hard limit, an active agent keeps the session alive.** The live command output, the heartbeat, and the audit log make that visible, and Ctrl+C always ends it.
 - **Public relays can rate-limit or disappear.** Beta uses the public Tailscale DERP relays.
 - **Upstream tailcat is experimental.** Its threat model assumes one trusted operator on both ends, which is exactly this use case.
