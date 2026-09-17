@@ -37,6 +37,10 @@ jobs:
           repository: tailscale/tailcat
           ref: ${{ steps.tailcat.outputs.commit }}
           path: .tailcat-src
+          # Go stamps the module version derived from the nearest tag into the
+          # binary, so a checkout without tags produces different bytes than a
+          # normal clone does.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6.4.0

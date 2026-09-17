@@ -71,7 +71,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist/bin
-          key: tailcat-${{ steps.pins.outputs.version }}-${{ steps.pins.outputs.commit }}
+          # The recipe is part of the key: changing how the binaries are built
+          # has to invalidate the ones already cached.
+          key: tailcat-${{ hashFiles('build/build-tailcat.sh', '.github/workflows/deploy-beta.yml') }}-${{ steps.pins.outputs.version }}-${{ steps.pins.outputs.commit }}
 
       - name: Check out tailcat
         if: steps.binaries.outputs.cache-hit != 'true'
@@ -80,6 +82,10 @@ jobs:
           repository: tailscale/tailcat
           ref: ${{ steps.pins.outputs.commit }}
           path: .tailcat-src
+          # Go stamps the module version derived from the nearest tag into the
+          # binary, so a checkout without tags produces different bytes than a
+          # normal clone does.
+          fetch-depth: 0
 
       - name: Set up Go
         if: steps.binaries.outputs.cache-hit != 'true'
