@@ -118,6 +118,12 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ steps.pins.outputs.version }}"
+          # A newly bound custom domain needs a moment to resolve.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            curl -fsS -o /dev/null https://beta.opentunnel.sh && break
+            echo "waiting for beta.opentunnel.sh (attempt $attempt)"
+            sleep 15
+          done
           curl -fsSL https://beta.opentunnel.sh | head -n 2
           curl -fsSL https://beta.opentunnel.sh/agent | head -n 2
           for target in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
