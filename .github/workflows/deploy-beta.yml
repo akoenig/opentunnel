@@ -105,8 +105,9 @@ jobs:
           cp dist/host.sh dist/agent.sh site/dist/
           cp -R dist/bin site/dist/bin
 
+      # v4 or newer: older wrangler releases cannot read wrangler.jsonc.
       - name: Deploy the beta worker
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
